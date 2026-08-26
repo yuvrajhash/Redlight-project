@@ -1,4 +1,14 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
+import type {
+  CognitiveContext,
+  CognitionStats,
+  ConsolidationResult,
+  MemoryQuery,
+  MemoryAuditResult,
+  MemoryRecordInput,
+  MemorySummary,
+  ObservationInput
+} from '../shared/cognition'
 
 export type KnownService = 'livekit' | 'openai' | 'google' | 'sarvam'
 
@@ -16,15 +26,7 @@ export type FridayUser = {
 }
 
 export type ComputerAction = {
-  action:
-    | 'move'
-    | 'click'
-    | 'double_click'
-    | 'right_click'
-    | 'type'
-    | 'key'
-    | 'scroll'
-    | 'drag'
+  action: 'move' | 'click' | 'double_click' | 'right_click' | 'type' | 'key' | 'scroll' | 'drag'
   x?: number
   y?: number
   text?: string
@@ -51,6 +53,16 @@ export type FridayAPI = {
   realtime: {
     mintEphemeralKey: () => Promise<{ value: string; model: string }>
   }
+  cognition: {
+    remember: (input: MemoryRecordInput) => Promise<MemorySummary>
+    observe: (input: ObservationInput) => Promise<MemorySummary | null>
+    recall: (query: MemoryQuery) => Promise<MemorySummary[]>
+    context: (query: MemoryQuery) => Promise<CognitiveContext>
+    audit: (claim: string) => Promise<MemoryAuditResult>
+    stats: () => Promise<CognitionStats>
+    consolidate: () => Promise<ConsolidationResult>
+    clear: () => Promise<void>
+  }
   getAgentConfig: () => Promise<AgentConfig>
   captureScreen: () => Promise<{ image: string }>
   describeScreen: (question: string) => Promise<string>
@@ -62,7 +74,6 @@ export type FridayAPI = {
     isOnboardingComplete: () => Promise<boolean>
     setOnboardingComplete: (value: boolean) => Promise<void>
     saveApiKey: (service: KnownService, key: string) => Promise<void>
-    getApiKey: (service: KnownService) => Promise<string | null>
     deleteApiKey: (service: KnownService) => Promise<void>
     validateGoogleKey: (key: string) => Promise<boolean>
     validateOpenAiKey: (key: string) => Promise<boolean>

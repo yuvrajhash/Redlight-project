@@ -48,10 +48,7 @@ export function setOnboardingComplete(value: boolean): void {
 export function saveApiKey(service: KnownService, plainTextKey: string): void {
   const keys = store.get('encryptedApiKeys')
   if (!safeStorage.isEncryptionAvailable()) {
-    console.warn('safeStorage encryption not available, storing as-is')
-    keys[service] = 'RAW_' + plainTextKey
-    store.set('encryptedApiKeys', keys)
-    return
+    throw new Error('Secure OS key storage is unavailable. Friday refused to save the API key.')
   }
   const encryptedBuffer = safeStorage.encryptString(plainTextKey)
   keys[service] = 'ENC_' + encryptedBuffer.toString('base64')

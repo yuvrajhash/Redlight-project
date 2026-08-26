@@ -4,6 +4,7 @@
     "electron.vite.config.ts",
     "src/main/**/*",
     "src/preload/**/*",
+    "src/shared/**/*",
     "trigger-panel.ts"
   ],
   "compilerOptions": {
@@ -15,6 +16,7 @@
     "moduleResolution": "bundler",
     "module": "ESNext",
     "target": "ESNext",
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true
   }
 }

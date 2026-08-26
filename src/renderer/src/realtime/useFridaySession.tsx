@@ -7,20 +7,10 @@ import {
   useState,
   type ReactNode
 } from 'react'
-import {
-  OpenAIRealtimeWebRTC,
-  RealtimeAgent,
-  RealtimeSession
-} from '@openai/agents/realtime'
+import { OpenAIRealtimeWebRTC, RealtimeAgent, RealtimeSession } from '@openai/agents/realtime'
 import { createFridayTools } from './tools'
 
-export type AgentState =
-  | 'connecting'
-  | 'idle'
-  | 'listening'
-  | 'thinking'
-  | 'speaking'
-  | 'failed'
+export type AgentState = 'connecting' | 'idle' | 'listening' | 'thinking' | 'speaking' | 'failed'
 
 export type MicMode = 'always' | 'ptt'
 
@@ -55,9 +45,7 @@ export function useFridaySessionContext(): FridaySessionValue {
 
 export function FridaySessionProvider({ children }: { children: ReactNode }) {
   const value = useFridaySession()
-  return (
-    <FridaySessionContext.Provider value={value}>{children}</FridaySessionContext.Provider>
-  )
+  return <FridaySessionContext.Provider value={value}>{children}</FridaySessionContext.Provider>
 }
 
 export function useFridaySession(): FridaySessionValue {
@@ -86,9 +74,37 @@ export function useFridaySession(): FridaySessionValue {
   const handleEvent = useCallback((event: { type?: string; transcript?: string }) => {
     const t = event?.type
     if (t === 'conversation.item.input_audio_transcription.completed') {
-      if (event.transcript) window.api.log('Transcript', `user: ${event.transcript.trim()}`)
+      if (event.transcript) {
+        const transcript = event.transcript.trim()
+        window.api.log('Transcript', `user transcript captured (${transcript.length} chars)`)
+        void window.api.cognition
+          .remember({
+            kind: 'episodic',
+            content: `The user said: ${transcript}`,
+            source: 'user',
+            tags: ['conversation', 'user-statement'],
+            confidence: 0.98,
+            salience: 0.62
+          })
+          .catch((error) => window.api.log('Cognition', `failed to remember user turn: ${error}`))
+      }
     } else if (t === 'response.output_audio_transcript.done') {
-      if (event.transcript) window.api.log('Transcript', `friday: ${event.transcript.trim()}`)
+      if (event.transcript) {
+        const transcript = event.transcript.trim()
+        window.api.log('Transcript', `assistant transcript captured (${transcript.length} chars)`)
+        void window.api.cognition
+          .remember({
+            kind: 'reflection',
+            content: `Friday replied: ${transcript}`,
+            source: 'assistant',
+            tags: ['conversation', 'assistant-response'],
+            confidence: 0.7,
+            salience: 0.42
+          })
+          .catch((error) =>
+            window.api.log('Cognition', `failed to remember assistant turn: ${error}`)
+          )
+      }
     }
     if (t === 'input_audio_buffer.speech_started') {
       window.api.log('Mic', 'server VAD: speech_started (audio IS reaching OpenAI)')
@@ -117,9 +133,18 @@ export function useFridaySession(): FridaySessionValue {
     let disposed = false
     void (async () => {
       try {
-        const [{ value: ephemeralKey, model }, cfg] = await Promise.all([
+        const [{ value: ephemeralKey, model }, cfg, memoryContext] = await Promise.all([
           window.api.realtime.mintEphemeralKey(),
-          window.api.getAgentConfig().catch(() => null)
+          window.api.getAgentConfig().catch(() => null),
+          window.api.cognition
+            .context({
+              query:
+                'recent conversation user preferences active goals recurring tasks corrections',
+              limit: 10,
+              minConfidence: 0.3,
+              includeRecent: true
+            })
+            .catch(() => ({ text: '', memories: [] }))
         ])
         if (disposed) return
         const audioEl = new Audio()
@@ -133,7 +158,9 @@ export function useFridaySession(): FridaySessionValue {
         const agent = new RealtimeAgent({
           name: 'friday',
           voice: cfg?.voice ?? 'marin',
-          instructions: cfg?.systemPrompt ?? FALLBACK_INSTRUCTIONS,
+          instructions: [cfg?.systemPrompt ?? FALLBACK_INSTRUCTIONS, memoryContext.text]
+            .filter(Boolean)
+            .join('\n\n'),
           tools
         })
         let inputStream: MediaStream | undefined
@@ -208,7 +235,9 @@ export function useFridaySession(): FridaySessionValue {
 
   useEffect(() => {
     if (!remoteTrack) return
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     const ctx = new AudioCtx()
     const source = ctx.createMediaStreamSource(new MediaStream([remoteTrack]))
     const analyser = ctx.createAnalyser()
@@ -254,16 +283,26 @@ export function useFridaySession(): FridaySessionValue {
   }, [remoteTrack])
 
   useEffect(() => {
-    const handler = (
-      _e: unknown,
-      payload: { answer: string | null }
-    ) => {
+    const handler = (_e: unknown, payload: { answer: string | null }) => {
       const instructions = payload.answer
         ? `Your background internet search just came back. Tell the boss what you found in one or two short, natural spoken sentences — confident and casual, no lists or number dumps. Speak ONLY facts from the result below; if it contradicts anything you said earlier, THIS is the truth — correct yourself naturally. Do not add facts that aren't here.
 
 Result:
 ${payload.answer}`
         : "Your background internet search failed. Tell the boss briefly you couldn't pull it up right now."
+      if (payload.answer) {
+        void window.api.cognition
+          .remember({
+            kind: 'semantic',
+            content: payload.answer,
+            source: 'tool',
+            tags: ['web-search', 'externally-verified'],
+            confidence: 0.82,
+            salience: 0.58,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          })
+          .catch((error) => window.api.log('Cognition', `failed to remember search: ${error}`))
+      }
       if (activeResponseRef.current) {
         pendingSpeakRef.current = instructions
       } else {

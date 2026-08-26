@@ -137,6 +137,16 @@ person, a price, the weather, sports, an event, a definition.
   fact. If a question needs live info, the truth comes from search_web, not your memory.
 - Call search_web ONCE per question — one query covers it. Wait for the result before searching again.
 
+### recall_memory / remember_this / audit_memory — Persistent Memory
+- Use recall_memory when the boss refers to an earlier conversation, preference, correction, task,
+  or learned procedure. Never pretend to remember something that recall_memory did not return.
+- Use remember_this when the boss explicitly says to remember something, teaches a stable preference,
+  corrects you, or provides a reusable procedure. Never store passwords, API keys, payment details,
+  authentication codes, private keys, or other secrets.
+- Memories are fallible context, not unquestionable facts. Verify time-sensitive claims before using them.
+- Use audit_memory to check a remembered claim for internal support or contradiction. It audits memory,
+  not the outside world; use search_web too when external or current verification is needed.
+
 ${controlCapability}
 
 ## Combining tools
@@ -249,7 +259,9 @@ function extractSearchSources(data: {
   const titleByUrl = new Map<string, string>()
   for (const item of data?.output ?? []) {
     if (item?.type !== 'message' || !Array.isArray(item.content)) continue
-    for (const c of item.content as Array<{ annotations?: Array<Record<string, unknown>> }>) {
+    for (const c of item.content as Array<{
+      annotations?: Array<Record<string, unknown>>
+    }>) {
       for (const ann of c?.annotations ?? []) {
         if (ann?.type === 'url_citation' && ann.url && ann.title) {
           titleByUrl.set(String(ann.url), String(ann.title).trim())
@@ -267,7 +279,11 @@ function extractSearchSources(data: {
   for (const url of ordered) {
     const host = domainOf(url)
     if (byHost.has(host)) continue
-    byHost.set(host, { title: titleByUrl.get(url) || host, url, low: isLowSignal(host, url) })
+    byHost.set(host, {
+      title: titleByUrl.get(url) || host,
+      url,
+      low: isLowSignal(host, url)
+    })
   }
   const all = [...byHost.values()]
   const ranked = [...all.filter((s) => !s.low), ...all.filter((s) => s.low)]
@@ -286,14 +302,20 @@ async function fetchWebSearch(query: string): Promise<{ answer: string; sources:
   const answer = extractOutputText(data) || 'I could not find anything current on that.'
   const raw = extractSearchSources(data)
   const sources = await Promise.all(
-    raw.map(async (s) => ({ ...s, favicon: await fetchFaviconDataUri(domainOf(s.url)) }))
+    raw.map(async (s) => ({
+      ...s,
+      favicon: await fetchFaviconDataUri(domainOf(s.url))
+    }))
   )
   return { answer, sources }
 }
 
 let searchInFlight = false
 
-export function startBackgroundSearch(query: string): { started: boolean; busy?: boolean } {
+export function startBackgroundSearch(query: string): {
+  started: boolean
+  busy?: boolean
+} {
   if (searchInFlight) {
     log.info(`[Search] rejected re-entry (already searching): ${query}`)
     return { started: false, busy: true }
@@ -376,10 +398,18 @@ async function executeCuaAction(
       })
       break
     case 'double_click':
-      await act({ action: 'double_click', x: nx(Number(action.x)), y: ny(Number(action.y)) })
+      await act({
+        action: 'double_click',
+        x: nx(Number(action.x)),
+        y: ny(Number(action.y))
+      })
       break
     case 'move':
-      await act({ action: 'move', x: nx(Number(action.x)), y: ny(Number(action.y)) })
+      await act({
+        action: 'move',
+        x: nx(Number(action.x)),
+        y: ny(Number(action.y))
+      })
       break
     case 'type':
       await act({ action: 'type', text: String(action.text ?? '') })
@@ -469,6 +499,14 @@ Use the computer tool to carry this out on the user's screen. When the task is c
         log.info(`[CUA] done in ${step} step(s): ${text}`)
         return text || 'Done, boss.'
       }
+      if (
+        Array.isArray(call.pending_safety_checks) &&
+        (call.pending_safety_checks as unknown[]).length
+      ) {
+        const count = (call.pending_safety_checks as unknown[]).length
+        log.warn(`[CUA] paused for ${count} unacknowledged safety check(s)`)
+        return 'I paused before acting because this step requires your explicit safety approval, boss.'
+      }
       broadcast('computer-control', { active: true })
       const actions =
         (call.actions as Array<Record<string, unknown>>) ||
@@ -481,16 +519,11 @@ Use the computer tool to carry this out on the user's screen. When the task is c
       const out: Record<string, unknown> = {
         type: 'computer_call_output',
         call_id: call.call_id,
-        output: { type: 'computer_screenshot', image_url: shot.image, detail: 'original' }
-      }
-      if (
-        Array.isArray(call.pending_safety_checks) &&
-        (call.pending_safety_checks as unknown[]).length
-      ) {
-        out.acknowledged_safety_checks = call.pending_safety_checks
-        log.info(
-          `[CUA] acknowledging ${(call.pending_safety_checks as unknown[]).length} safety check(s)`
-        )
+        output: {
+          type: 'computer_screenshot',
+          image_url: shot.image,
+          detail: 'original'
+        }
       }
       response = await openaiResponses({
         model: COMPUTER_USE_MODEL(),

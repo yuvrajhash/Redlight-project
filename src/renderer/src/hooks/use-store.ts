@@ -8,7 +8,6 @@ export function useStore() {
       isOnboardingComplete: () => window.api.store.isOnboardingComplete(),
       setOnboardingComplete: (value: boolean) => window.api.store.setOnboardingComplete(value),
       saveApiKey: (service: KnownService, key: string) => window.api.store.saveApiKey(service, key),
-      getApiKey: (service: KnownService) => window.api.store.getApiKey(service),
       deleteApiKey: (service: KnownService) => window.api.store.deleteApiKey(service),
       validateGoogleKey: (key: string) => window.api.store.validateGoogleKey(key),
       validateOpenAiKey: (key: string) => window.api.store.validateOpenAiKey(key),

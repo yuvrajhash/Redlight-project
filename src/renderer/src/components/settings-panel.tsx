@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check, KeyRound, LoaderCircle, Mic } from 'lucide-react'
+import { Brain, Check, KeyRound, LoaderCircle, Mic, RefreshCw, Trash2 } from 'lucide-react'
 import { useStore } from '@/hooks/use-store'
 import { useFridaySessionContext } from '@/realtime/useFridaySession'
+import type { CognitionStats } from '../../../shared/cognition'
 
 export function SettingsPanel() {
   const { saveApiKey, validateOpenAiKey } = useStore()
@@ -10,6 +11,9 @@ export function SettingsPanel() {
   const [openaiKey, setOpenaiKey] = useState('')
   const [keyState, setKeyState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [keyError, setKeyError] = useState('')
+  const [memoryStats, setMemoryStats] = useState<CognitionStats | null>(null)
+  const [memoryBusy, setMemoryBusy] = useState(false)
+  const [confirmForget, setConfirmForget] = useState(false)
 
   useEffect(() => {
     const refresh = async () => {
@@ -20,6 +24,35 @@ export function SettingsPanel() {
     navigator.mediaDevices.addEventListener('devicechange', refresh)
     return () => navigator.mediaDevices.removeEventListener('devicechange', refresh)
   }, [])
+
+  useEffect(() => {
+    void window.api.cognition.stats().then(setMemoryStats)
+  }, [])
+
+  const consolidateMemory = async () => {
+    setMemoryBusy(true)
+    try {
+      await window.api.cognition.consolidate()
+      setMemoryStats(await window.api.cognition.stats())
+    } finally {
+      setMemoryBusy(false)
+    }
+  }
+
+  const forgetEverything = async () => {
+    if (!confirmForget) {
+      setConfirmForget(true)
+      return
+    }
+    setMemoryBusy(true)
+    try {
+      await window.api.cognition.clear()
+      setMemoryStats(await window.api.cognition.stats())
+      setConfirmForget(false)
+    } finally {
+      setMemoryBusy(false)
+    }
+  }
 
   const handleSaveKey = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -113,6 +146,37 @@ export function SettingsPanel() {
             </p>
           )}
         </form>
+        <div className="mt-3 border-t border-white/10 pt-2.5">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <Brain className="h-3 w-3" /> Cognitive memory
+            </span>
+            <span className="text-[10px] text-zinc-500">
+              {memoryStats ? `${memoryStats.activeMemories} active` : 'Loading…'}
+            </span>
+          </div>
+          <p className="mb-2 text-[10px] leading-relaxed text-zinc-500">
+            Friday recalls relevant preferences, experiences, procedures and corrections locally.
+          </p>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              disabled={memoryBusy}
+              onClick={() => void consolidateMemory()}
+              className="flex h-7 flex-1 items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 text-[10px] font-medium text-zinc-300 hover:bg-white/10 disabled:opacity-40"
+            >
+              <RefreshCw className={`h-3 w-3 ${memoryBusy ? 'animate-spin' : ''}`} /> Consolidate
+            </button>
+            <button
+              type="button"
+              disabled={memoryBusy}
+              onClick={() => void forgetEverything()}
+              className="flex h-7 flex-1 items-center justify-center gap-1 rounded-lg border border-red-400/20 bg-red-400/5 text-[10px] font-medium text-red-300 hover:bg-red-400/10 disabled:opacity-40"
+            >
+              <Trash2 className="h-3 w-3" /> {confirmForget ? 'Confirm forget' : 'Forget all'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
