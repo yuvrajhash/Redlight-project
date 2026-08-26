@@ -22,6 +22,19 @@ const api: FridayAPI = {
     consolidate: () => ipcRenderer.invoke('cognition:consolidate'),
     clear: () => ipcRenderer.invoke('cognition:clear')
   },
+  planning: {
+    createGoal: (input) => ipcRenderer.invoke('planning:createGoal', input),
+    setPlan: (input) => ipcRenderer.invoke('planning:setPlan', input),
+    listGoals: (query) => ipcRenderer.invoke('planning:listGoals', query),
+    nextActions: (limit) => ipcRenderer.invoke('planning:nextActions', limit),
+    approveStep: (goalId, stepId, userConfirmed) =>
+      ipcRenderer.invoke('planning:approveStep', goalId, stepId, userConfirmed),
+    beginStep: (goalId, stepId) => ipcRenderer.invoke('planning:beginStep', goalId, stepId),
+    resolveStep: (goalId, stepId, outcome, succeeded) =>
+      ipcRenderer.invoke('planning:resolveStep', goalId, stepId, outcome, succeeded),
+    setGoalStatus: (goalId, status) => ipcRenderer.invoke('planning:setGoalStatus', goalId, status),
+    stats: () => ipcRenderer.invoke('planning:stats')
+  },
   getAgentConfig: () => ipcRenderer.invoke('get-agent-config'),
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
   describeScreen: (question) => ipcRenderer.invoke('describe-screen', question),

@@ -55,6 +55,7 @@ import {
 import { describeScreen, getAgentConfig, runComputerUseLoop, startBackgroundSearch } from './brains'
 import { CognitiveSystem } from './cognition/system'
 import type { MemoryQuery, MemoryRecordInput, ObservationInput } from '../shared/cognition'
+import type { GoalInput, GoalPlanInput, GoalQuery, GoalStatus } from '../shared/planning'
 
 dotenvConfig({
   path: app.isPackaged
@@ -217,7 +218,8 @@ app.whenReady().then(async () => {
   logPermissionDiagnostics()
 
   cognition = new CognitiveSystem({
-    filePath: join(app.getPath('userData'), 'cognition-v1.json')
+    filePath: join(app.getPath('userData'), 'cognition-v1.json'),
+    planningFilePath: join(app.getPath('userData'), 'planning-v1.json')
   })
   try {
     await cognition.initialize()
@@ -254,6 +256,27 @@ app.whenReady().then(async () => {
   ipcMain.handle('cognition:stats', () => cognition?.store.stats())
   ipcMain.handle('cognition:consolidate', () => cognition?.store.consolidate())
   ipcMain.handle('cognition:clear', () => cognition?.store.clear())
+  ipcMain.handle('planning:createGoal', (_event, input: GoalInput) => cognition?.createGoal(input))
+  ipcMain.handle('planning:setPlan', (_event, input: GoalPlanInput) => cognition?.planGoal(input))
+  ipcMain.handle('planning:listGoals', (_event, query?: GoalQuery) => cognition?.listGoals(query))
+  ipcMain.handle('planning:nextActions', (_event, limit?: number) => cognition?.nextActions(limit))
+  ipcMain.handle(
+    'planning:approveStep',
+    (_event, goalId: string, stepId: string, userConfirmed: boolean) =>
+      cognition?.approveStep(goalId, stepId, userConfirmed)
+  )
+  ipcMain.handle('planning:beginStep', (_event, goalId: string, stepId: string) =>
+    cognition?.beginStep(goalId, stepId)
+  )
+  ipcMain.handle(
+    'planning:resolveStep',
+    (_event, goalId: string, stepId: string, outcome: string, succeeded: boolean) =>
+      cognition?.resolveStep(goalId, stepId, outcome, succeeded)
+  )
+  ipcMain.handle('planning:setGoalStatus', (_event, goalId: string, status: GoalStatus) =>
+    cognition?.setGoalStatus(goalId, status)
+  )
+  ipcMain.handle('planning:stats', () => cognition?.planner.stats())
 
   ipcMain.handle('store:isOnboardingComplete', () => isOnboardingComplete())
   ipcMain.handle('store:setOnboardingComplete', (_event, value: boolean) => {

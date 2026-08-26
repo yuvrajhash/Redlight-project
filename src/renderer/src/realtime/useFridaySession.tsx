@@ -70,12 +70,25 @@ export function useFridaySession(): FridaySessionValue {
   const speakingRef = useRef(false)
   const activeResponseRef = useRef(false)
   const pendingSpeakRef = useRef<string | null>(null)
+  const freshApprovalRef = useRef<{
+    capturedAt: number
+    expiresAt: number
+    consumed: boolean
+  } | null>(null)
 
   const handleEvent = useCallback((event: { type?: string; transcript?: string }) => {
     const t = event?.type
     if (t === 'conversation.item.input_audio_transcription.completed') {
       if (event.transcript) {
         const transcript = event.transcript.trim()
+        if (/^(yes|yes[, ]+please|approved?|proceed|go ahead|do it|continue)\b/i.test(transcript)) {
+          const capturedAt = Date.now()
+          freshApprovalRef.current = {
+            capturedAt,
+            expiresAt: capturedAt + 30_000,
+            consumed: false
+          }
+        }
         window.api.log('Transcript', `user transcript captured (${transcript.length} chars)`)
         void window.api.cognition
           .remember({
@@ -153,7 +166,20 @@ export function useFridaySession(): FridaySessionValue {
         const tools = createFridayTools({
           visionMode: cfg?.visionMode ?? 'subagent',
           controlBrain: cfg?.controlBrain ?? 'openai-cua',
-          inject: (event) => sessionRef.current?.transport.sendEvent(event)
+          inject: (event) => sessionRef.current?.transport.sendEvent(event),
+          consumeFreshApproval: (requestedAt) => {
+            const approval = freshApprovalRef.current
+            if (
+              !approval ||
+              approval.consumed ||
+              approval.capturedAt < requestedAt ||
+              approval.expiresAt < Date.now()
+            ) {
+              return false
+            }
+            approval.consumed = true
+            return true
+          }
         })
         const agent = new RealtimeAgent({
           name: 'friday',
