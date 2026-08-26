@@ -1,11 +1,6 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
-  "include": [
-    "electron.vite.config.ts",
-    "src/main/**/*",
-    "src/preload/**/*",
-    "trigger-panel.ts"
-  ],
+  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "trigger-panel.ts"],
   "compilerOptions": {
     "composite": true,
     "types": ["electron-vite/node"],
@@ -15,6 +10,7 @@
     "moduleResolution": "bundler",
     "module": "ESNext",
     "target": "ESNext",
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true
   }
 }
