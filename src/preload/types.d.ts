@@ -20,6 +20,13 @@ import type {
   PlanningStats,
   StepResolution
 } from '../shared/planning'
+import type {
+  BeliefFact,
+  BeliefInput,
+  KnowledgeQuery,
+  KnowledgeQueryResult,
+  KnowledgeStats
+} from '../shared/knowledge'
 
 export type KnownService = 'livekit' | 'openai' | 'google' | 'sarvam'
 
@@ -73,6 +80,12 @@ export type FridayAPI = {
     stats: () => Promise<CognitionStats>
     consolidate: () => Promise<ConsolidationResult>
     clear: () => Promise<void>
+  }
+  knowledge: {
+    learn: (input: BeliefInput) => Promise<BeliefFact>
+    query: (query: KnowledgeQuery) => Promise<KnowledgeQueryResult>
+    inspectEntity: (entityId: string) => Promise<KnowledgeQueryResult>
+    stats: () => Promise<KnowledgeStats>
   }
   planning: {
     createGoal: (input: GoalInput) => Promise<Goal>
