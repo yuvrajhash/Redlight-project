@@ -28,7 +28,19 @@ export function createFridayTools({
     execute: async ({ question }) => {
       window.api.log('Tool', `look_at_screen (${effectiveVisionMode}): ${question}`)
       if (effectiveVisionMode === 'subagent') {
-        return await window.api.describeScreen(question)
+        const answer = await window.api.describeScreen(question)
+        void window.api.cognition
+          .remember({
+            kind: 'episodic',
+            content: `Screen question: ${question}\nObserved answer: ${answer}`,
+            source: 'screen',
+            tags: ['screen-observation', 'vision'],
+            confidence: 0.72,
+            salience: 0.5,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+          })
+          .catch((error) => window.api.log('Cognition', `failed to remember screen view: ${error}`))
+        return answer
       }
       const { image } = await window.api.captureScreen()
       if (!image) return 'Could not capture the screen right now, boss.'
@@ -54,6 +66,20 @@ export function createFridayTools({
     }),
     execute: async ({ query }) => {
       window.api.log('Tool', `search_web: ${query}`)
+      void window.api.cognition
+        .observe({
+          content: `The user requested a live web search for: ${query}`,
+          source: 'user',
+          tags: ['web-search', 'active-question'],
+          confidence: 0.98,
+          salience: 0.55,
+          novelty: 0.6,
+          userDirected: true,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        })
+        .catch((error) =>
+          window.api.log('Cognition', `failed to remember search request: ${error}`)
+        )
       const { busy } = await window.api.webSearch(query)
       if (busy) {
         return `You're already searching — do NOT call search_web again. Just say you're still looking ("Still pulling it up, boss.") and wait; the answer is on its way.`
@@ -62,7 +88,82 @@ export function createFridayTools({
     }
   })
 
-  return [lookAtScreen, searchWeb, ...createControlTools(controlBrain)]
+  const recallMemory = tool({
+    name: 'recall_memory',
+    description:
+      'Searches Friday long-term memory for prior conversations, user preferences, corrections, past outcomes, learned procedures, or known facts. Use when the user asks what they previously said, refers to an earlier event, or when past experience could materially improve the answer.',
+    parameters: z.object({
+      query: z.string().describe('A concise description of what should be remembered.'),
+      kinds: z
+        .array(z.enum(['episodic', 'semantic', 'procedural', 'self', 'reflection']))
+        .optional()
+        .describe('Optional memory types to search.')
+    }),
+    execute: async ({ query, kinds }) => {
+      const context = await window.api.cognition.context({
+        query,
+        kinds,
+        limit: 8
+      })
+      return context.text || 'No relevant long-term memory was found. Do not invent one.'
+    }
+  })
+
+  const rememberThis = tool({
+    name: 'remember_this',
+    description:
+      'Stores a durable memory only when the user explicitly asks Friday to remember something, states a stable preference, teaches a reusable procedure, or corrects a previous belief. Do not store passwords, API keys, payment details, or other secrets.',
+    parameters: z.object({
+      content: z
+        .string()
+        .describe('The durable fact, preference, correction, or procedure to remember.'),
+      kind: z
+        .enum(['semantic', 'procedural', 'self'])
+        .describe(
+          'semantic=fact/preference, procedural=how-to, self=Friday capability or limitation.'
+        ),
+      tags: z.array(z.string()).optional().describe('A few short retrieval tags.')
+    }),
+    execute: async ({ content, kind, tags }) => {
+      await window.api.cognition.remember({
+        kind,
+        content,
+        source: 'user',
+        tags: ['explicit-memory', ...(tags ?? [])],
+        confidence: 0.95,
+        salience: 0.9
+      })
+      return 'Stored in long-term memory.'
+    }
+  })
+
+  const auditMemory = tool({
+    name: 'audit_memory',
+    description:
+      'Checks a claim against Friday stored memories, including contradictory experiences and evidence. This audits internal consistency only. Use live web search as well when the claim is current or externally verifiable.',
+    parameters: z.object({
+      claim: z.string().describe('The precise claim to check against long-term memory.')
+    }),
+    execute: async ({ claim }) => {
+      const audit = await window.api.cognition.audit(claim)
+      return JSON.stringify({
+        verdict: audit.verdict,
+        confidence: audit.confidence,
+        explanation: audit.explanation,
+        supporting: audit.supporting.map((memory) => memory.content),
+        conflicting: audit.conflicting.map((memory) => memory.content)
+      })
+    }
+  })
+
+  return [
+    lookAtScreen,
+    searchWeb,
+    recallMemory,
+    rememberThis,
+    auditMemory,
+    ...createControlTools(controlBrain)
+  ]
 }
 
 function createControlTools(controlBrain: ControlBrain) {
@@ -82,7 +183,18 @@ const controlComputer = tool({
   }),
   execute: async ({ task }) => {
     window.api.log('Tool', `control_computer: ${task}`)
-    return await window.api.controlComputer(task)
+    const result = await window.api.controlComputer(task)
+    void window.api.cognition
+      .remember({
+        kind: 'procedural',
+        content: `Computer task: ${task}\nOutcome: ${result}`,
+        source: 'tool',
+        tags: ['computer-control', 'task-outcome'],
+        confidence: /done|complete|opened|finished/i.test(result) ? 0.75 : 0.45,
+        salience: 0.68
+      })
+      .catch((error) => window.api.log('Cognition', `failed to remember task outcome: ${error}`))
+    return result
   }
 })
 
@@ -145,9 +257,11 @@ const scrollScreen = tool({
     amount: z.number().describe('How many scroll steps (3 is a normal amount).')
   }),
   execute: async ({ direction, amount }) => {
-    const { ok } = await window.api.computerAction({ action: 'scroll', direction, amount })
-    return ok
-      ? `Scrolled ${direction}. Call look_at_screen to see the new view.`
-      : 'Scroll failed.'
+    const { ok } = await window.api.computerAction({
+      action: 'scroll',
+      direction,
+      amount
+    })
+    return ok ? `Scrolled ${direction}. Call look_at_screen to see the new view.` : 'Scroll failed.'
   }
 })
