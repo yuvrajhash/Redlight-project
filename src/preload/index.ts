@@ -41,12 +41,30 @@ const api: FridayAPI = {
     setGoalStatus: (goalId, status) => ipcRenderer.invoke('planning:setGoalStatus', goalId, status),
     stats: () => ipcRenderer.invoke('planning:stats')
   },
+  runtime: {
+    ingest: (input) => ipcRenderer.invoke('runtime:ingest', input),
+    cycle: () => ipcRenderer.invoke('runtime:cycle'),
+    sleep: () => ipcRenderer.invoke('runtime:sleep'),
+    stats: () => ipcRenderer.invoke('runtime:stats'),
+    updateWorld: (input) => ipcRenderer.invoke('runtime:updateWorld', input),
+    worldSnapshot: () => ipcRenderer.invoke('runtime:worldSnapshot'),
+    learnSkill: (input) => ipcRenderer.invoke('runtime:learnSkill', input),
+    matchSkills: (query, limit) => ipcRenderer.invoke('runtime:matchSkills', query, limit),
+    recordSkillOutcome: (input) => ipcRenderer.invoke('runtime:recordSkillOutcome', input),
+    updateCapability: (input) => ipcRenderer.invoke('runtime:updateCapability', input),
+    auditReasoning: (input) => ipcRenderer.invoke('runtime:auditReasoning', input),
+    selfSnapshot: () => ipcRenderer.invoke('runtime:selfSnapshot'),
+    emergencyStop: () => ipcRenderer.invoke('runtime:emergencyStop'),
+    resetEmergencyStop: (userConfirmed) =>
+      ipcRenderer.invoke('runtime:resetEmergencyStop', userConfirmed)
+  },
   getAgentConfig: () => ipcRenderer.invoke('get-agent-config'),
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
   describeScreen: (question) => ipcRenderer.invoke('describe-screen', question),
   webSearch: (query) => ipcRenderer.invoke('web-search', query),
   computerAction: (action) => ipcRenderer.invoke('computer-action', action),
-  controlComputer: (task) => ipcRenderer.invoke('control-computer', task),
+  controlComputer: (task, approved = false) =>
+    ipcRenderer.invoke('control-computer', task, approved),
   store: {
     initialOnboardingComplete,
     isOnboardingComplete: () => ipcRenderer.invoke('store:isOnboardingComplete'),

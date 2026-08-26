@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Brain, Check, KeyRound, LoaderCircle, Mic, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  Brain,
+  Check,
+  KeyRound,
+  LoaderCircle,
+  Mic,
+  RefreshCw,
+  ShieldAlert,
+  Trash2
+} from 'lucide-react'
 import { useStore } from '@/hooks/use-store'
 import { useFridaySessionContext } from '@/realtime/useFridaySession'
 import type { CognitionStats } from '../../../shared/cognition'
+import type { RuntimeStats } from '../../../shared/runtime'
 
 export function SettingsPanel() {
   const { saveApiKey, validateOpenAiKey } = useStore()
@@ -14,6 +24,7 @@ export function SettingsPanel() {
   const [memoryStats, setMemoryStats] = useState<CognitionStats | null>(null)
   const [memoryBusy, setMemoryBusy] = useState(false)
   const [confirmForget, setConfirmForget] = useState(false)
+  const [runtimeStats, setRuntimeStats] = useState<RuntimeStats | null>(null)
 
   useEffect(() => {
     const refresh = async () => {
@@ -26,17 +37,34 @@ export function SettingsPanel() {
   }, [])
 
   useEffect(() => {
-    void window.api.cognition.stats().then(setMemoryStats)
+    void Promise.all([
+      window.api.cognition.stats().then(setMemoryStats),
+      window.api.runtime.stats().then(setRuntimeStats)
+    ])
   }, [])
 
   const consolidateMemory = async () => {
     setMemoryBusy(true)
     try {
-      await window.api.cognition.consolidate()
-      setMemoryStats(await window.api.cognition.stats())
+      await window.api.runtime.sleep()
+      const [memory, runtime] = await Promise.all([
+        window.api.cognition.stats(),
+        window.api.runtime.stats()
+      ])
+      setMemoryStats(memory)
+      setRuntimeStats(runtime)
     } finally {
       setMemoryBusy(false)
     }
+  }
+
+  const toggleEmergencyStop = async () => {
+    if (runtimeStats?.mode === 'emergency_stopped') {
+      await window.api.runtime.resetEmergencyStop(true)
+    } else {
+      await window.api.runtime.emergencyStop()
+    }
+    setRuntimeStats(await window.api.runtime.stats())
   }
 
   const forgetEverything = async () => {
@@ -156,8 +184,15 @@ export function SettingsPanel() {
             </span>
           </div>
           <p className="mb-2 text-[10px] leading-relaxed text-zinc-500">
-            Friday recalls relevant preferences, experiences, procedures and corrections locally.
+            Friday recalls memory, tracks world state, learns verified procedures and audits its
+            reasoning locally.
           </p>
+          {runtimeStats ? (
+            <p className="mb-2 text-[10px] text-zinc-500">
+              {runtimeStats.worldEntities} world entities · {runtimeStats.verifiedSkills}/
+              {runtimeStats.learnedSkills} skills verified · {runtimeStats.reasoningAudits} audits
+            </p>
+          ) : null}
           <div className="flex gap-1.5">
             <button
               type="button"
@@ -176,6 +211,23 @@ export function SettingsPanel() {
               <Trash2 className="h-3 w-3" /> {confirmForget ? 'Confirm forget' : 'Forget all'}
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => void toggleEmergencyStop()}
+            className={`mt-1.5 flex h-7 w-full items-center justify-center gap-1 rounded-lg border text-[10px] font-semibold ${
+              runtimeStats?.mode === 'emergency_stopped'
+                ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                : 'border-red-400/20 bg-red-400/5 text-red-300 hover:bg-red-400/10'
+            }`}
+          >
+            <ShieldAlert className="h-3 w-3" />
+            {runtimeStats?.mode === 'emergency_stopped'
+              ? 'Reset emergency stop'
+              : 'Stop all computer control'}
+          </button>
+          <p className="mt-1 text-center text-[9px] text-zinc-600">
+            Global shortcut: Ctrl/Cmd + Shift + F12
+          </p>
         </div>
       </div>
     </div>

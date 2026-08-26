@@ -4,15 +4,7 @@ import { join } from 'node:path'
 import log from './logger'
 
 export type ComputerAction = {
-  action:
-    | 'move'
-    | 'click'
-    | 'double_click'
-    | 'right_click'
-    | 'type'
-    | 'key'
-    | 'scroll'
-    | 'drag'
+  action: 'move' | 'click' | 'double_click' | 'right_click' | 'type' | 'key' | 'scroll' | 'drag'
   x?: number
   y?: number
   text?: string
@@ -28,6 +20,17 @@ type NutModule = any
 let nut: NutModule | null = null
 let nutLoadFailed = false
 
+async function primaryScreenSource(thumbnailSize: { width: number; height: number }) {
+  const primary = screen.getPrimaryDisplay()
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize })
+  if (sources.length === 0) throw new Error('No screen sources available')
+  const source = sources.find((candidate) => candidate.display_id === String(primary.id))
+  if (!source) {
+    throw new Error('The primary display could not be matched to a screen-capture source.')
+  }
+  return source
+}
+
 export async function captureScreen(): Promise<string> {
   const display = screen.getPrimaryDisplay()
   const { width, height } = display.size
@@ -36,9 +39,8 @@ export async function captureScreen(): Promise<string> {
     width: Math.round(width * scale),
     height: Math.round(height * scale)
   }
-  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize })
-  if (sources.length === 0) throw new Error('No screen sources available')
-  const jpeg = sources[0].thumbnail.toJPEG(70)
+  const source = await primaryScreenSource(thumbnailSize)
+  const jpeg = source.thumbnail.toJPEG(70)
   return `data:image/jpeg;base64,${jpeg.toString('base64')}`
 }
 
@@ -50,13 +52,12 @@ export async function captureScreenForControl(): Promise<{
   const display = screen.getPrimaryDisplay()
   const { width, height } = display.size
   const scale = Math.min(1, 1920 / Math.max(width, height))
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width: Math.round(width * scale), height: Math.round(height * scale) }
+  const source = await primaryScreenSource({
+    width: Math.round(width * scale),
+    height: Math.round(height * scale)
   })
-  if (sources.length === 0) throw new Error('No screen sources available')
-  const size = sources[0].thumbnail.getSize()
-  const jpeg = sources[0].thumbnail.toJPEG(80)
+  const size = source.thumbnail.getSize()
+  const jpeg = source.thumbnail.toJPEG(80)
   return {
     image: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
     width: size.width,
@@ -124,10 +125,9 @@ export async function runComputerAction(a: ComputerAction): Promise<void> {
   const n = await getNut()
   if (!n) throw new Error('Input injection unavailable (nut.js failed to load)')
   const toPoint = async () => {
-    const w = await n.screen.width()
-    const h = await n.screen.height()
-    const px = Math.round(((a.x ?? 0) / 1000) * w)
-    const py = Math.round(((a.y ?? 0) / 1000) * h)
+    const bounds = screen.getPrimaryDisplay().bounds
+    const px = bounds.x + Math.round(((a.x ?? 0) / 1000) * bounds.width)
+    const py = bounds.y + Math.round(((a.y ?? 0) / 1000) * bounds.height)
     return new n.Point(px, py)
   }
   switch (a.action) {
@@ -169,10 +169,13 @@ export async function runComputerAction(a: ComputerAction): Promise<void> {
     }
     case 'drag': {
       if (!a.path || a.path.length < 2) break
-      const w = await n.screen.width()
-      const h = await n.screen.height()
+      const bounds = screen.getPrimaryDisplay().bounds
       const pts = a.path.map(
-        (p) => new n.Point(Math.round((p.x / 1000) * w), Math.round((p.y / 1000) * h))
+        (p) =>
+          new n.Point(
+            bounds.x + Math.round((p.x / 1000) * bounds.width),
+            bounds.y + Math.round((p.y / 1000) * bounds.height)
+          )
       )
       await n.mouse.setPosition(pts[0])
       await n.mouse.pressButton(n.Button.LEFT)

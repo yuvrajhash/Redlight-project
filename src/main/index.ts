@@ -5,6 +5,7 @@ import { createServer } from 'http'
 import {
   app,
   BrowserWindow,
+  globalShortcut,
   ipcMain,
   Menu,
   nativeImage,
@@ -14,7 +15,6 @@ import {
   Tray
 } from 'electron'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { autoUpdater } from 'electron-updater'
 import log from './logger'
 import {
   deleteApiKey,
@@ -52,11 +52,25 @@ import {
   stopPushToTalk,
   type ComputerAction
 } from './os'
-import { describeScreen, getAgentConfig, runComputerUseLoop, startBackgroundSearch } from './brains'
+import {
+  describeScreen,
+  getAgentConfig,
+  runComputerUseLoop,
+  startBackgroundSearch,
+  stopComputerUseLoop
+} from './brains'
 import { CognitiveSystem } from './cognition/system'
 import type { MemoryQuery, MemoryRecordInput, ObservationInput } from '../shared/cognition'
 import type { GoalInput, GoalPlanInput, GoalQuery, GoalStatus } from '../shared/planning'
 import type { BeliefInput, KnowledgeQuery } from '../shared/knowledge'
+import type {
+  CapabilityInput,
+  PerceptionEventInput,
+  ReasoningAuditInput,
+  SkillInput,
+  SkillOutcome,
+  WorldEntityInput
+} from '../shared/runtime'
 
 dotenvConfig({
   path: app.isPackaged
@@ -74,6 +88,7 @@ let isQuitting = false
 let triggerServerStarted = false
 let cognition: CognitiveSystem | null = null
 let cognitionTimer: NodeJS.Timeout | null = null
+let cognitiveCycleTimer: NodeJS.Timeout | null = null
 
 function broadcast(channel: string, payload?: unknown): void {
   BrowserWindow.getAllWindows().forEach((win) => win.webContents.send(channel, payload))
@@ -81,13 +96,13 @@ function broadcast(channel: string, payload?: unknown): void {
 
 function createMainWindow(): void {
   const primaryDisplay = screen.getPrimaryDisplay()
-  const { width, height } = primaryDisplay.bounds
+  const { width, height, x, y } = primaryDisplay.bounds
   const onboarded = isOnboardingComplete()
   mainWindow = new BrowserWindow({
     width,
     height,
-    x: 0,
-    y: 0,
+    x,
+    y,
     show: false,
     autoHideMenuBar: true,
     transparent: true,
@@ -221,7 +236,10 @@ app.whenReady().then(async () => {
   cognition = new CognitiveSystem({
     filePath: join(app.getPath('userData'), 'cognition-v1.json'),
     planningFilePath: join(app.getPath('userData'), 'planning-v1.json'),
-    knowledgeFilePath: join(app.getPath('userData'), 'knowledge-v1.json')
+    knowledgeFilePath: join(app.getPath('userData'), 'knowledge-v1.json'),
+    worldFilePath: join(app.getPath('userData'), 'world-v1.json'),
+    skillsFilePath: join(app.getPath('userData'), 'skills-v1.json'),
+    selfFilePath: join(app.getPath('userData'), 'self-v1.json')
   })
   try {
     await cognition.initialize()
@@ -230,12 +248,26 @@ app.whenReady().then(async () => {
     log.error(`[Cognition] failed to load persisted memory; starting empty: ${error}`)
   }
   cognitionTimer = setInterval(() => {
-    void cognition?.store
-      .consolidate()
-      .then((result) => log.info(`[Cognition] consolidation complete: ${JSON.stringify(result)}`))
-      .catch((error) => log.error(`[Cognition] consolidation failed: ${error}`))
+    void cognition
+      ?.sleep()
+      .then((result) =>
+        log.info(`[Cognition] sleep consolidation complete: ${JSON.stringify(result)}`)
+      )
+      .catch((error) => log.error(`[Cognition] sleep consolidation failed: ${error}`))
   }, COGNITIVE_CONSOLIDATION_MS)
   cognitionTimer.unref()
+  cognitiveCycleTimer = setInterval(() => {
+    if (!cognition || cognition.runtime.stats().queuedEvents === 0) return
+    void cognition.runCycle().catch((error) => log.error(`[Cognition] cycle failed: ${error}`))
+  }, 2_000)
+  cognitiveCycleTimer.unref()
+
+  globalShortcut.register('CommandOrControl+Shift+F12', () => {
+    cognition?.supervisor.emergencyStop()
+    stopComputerUseLoop()
+    broadcast('computer-control', { active: false, emergencyStopped: true })
+    log.warn('[Safety] emergency stop activated')
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -287,6 +319,38 @@ app.whenReady().then(async () => {
     cognition?.setGoalStatus(goalId, status)
   )
   ipcMain.handle('planning:stats', () => cognition?.planner.stats())
+  ipcMain.handle('runtime:ingest', (_event, input: PerceptionEventInput) =>
+    cognition?.ingestPerception(input)
+  )
+  ipcMain.handle('runtime:cycle', () => cognition?.runCycle())
+  ipcMain.handle('runtime:sleep', () => cognition?.sleep())
+  ipcMain.handle('runtime:stats', () => cognition?.runtime.stats())
+  ipcMain.handle('runtime:updateWorld', (_event, input: WorldEntityInput) =>
+    cognition?.updateWorld(input)
+  )
+  ipcMain.handle('runtime:worldSnapshot', () => cognition?.world.snapshot())
+  ipcMain.handle('runtime:learnSkill', (_event, input: SkillInput) => cognition?.learnSkill(input))
+  ipcMain.handle('runtime:matchSkills', (_event, query: string, limit?: number) =>
+    cognition?.matchSkills(query, limit)
+  )
+  ipcMain.handle('runtime:recordSkillOutcome', (_event, input: SkillOutcome) =>
+    cognition?.recordSkillOutcome(input)
+  )
+  ipcMain.handle('runtime:updateCapability', (_event, input: CapabilityInput) =>
+    cognition?.updateCapability(input)
+  )
+  ipcMain.handle('runtime:auditReasoning', (_event, input: ReasoningAuditInput) =>
+    cognition?.auditReasoning(input)
+  )
+  ipcMain.handle('runtime:selfSnapshot', () => cognition?.self.snapshot())
+  ipcMain.handle('runtime:emergencyStop', () => {
+    cognition?.supervisor.emergencyStop()
+    stopComputerUseLoop()
+    broadcast('computer-control', { active: false, emergencyStopped: true })
+  })
+  ipcMain.handle('runtime:resetEmergencyStop', (_event, userConfirmed: boolean) =>
+    cognition?.supervisor.reset(userConfirmed)
+  )
 
   ipcMain.handle('store:isOnboardingComplete', () => isOnboardingComplete())
   ipcMain.handle('store:setOnboardingComplete', (_event, value: boolean) => {
@@ -390,6 +454,10 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('web-search', (_event, query: string) => startBackgroundSearch(query))
   ipcMain.handle('computer-action', async (_event, action: ComputerAction) => {
+    const authorization = cognition?.supervisor.authorize(`direct ${action.action}`, false)
+    if (authorization && !authorization.allowed) {
+      return { ok: false, error: authorization.reason }
+    }
     broadcast('computer-control', { active: true, action: action.action })
     const detail = [
       action.x != null ? `(${action.x},${action.y})` : '',
@@ -408,9 +476,25 @@ app.whenReady().then(async () => {
       return { ok: false, error: String(err) }
     }
   })
-  ipcMain.handle('control-computer', async (_event, task: string) => runComputerUseLoop(task))
+  ipcMain.handle('control-computer', async (_event, task: string, approved = false) => {
+    const authorization = cognition?.supervisor.authorize(task, approved)
+    if (authorization && !authorization.allowed) return `Approval required: ${authorization.reason}`
+    return runComputerUseLoop(task)
+  })
 
   ipcMain.handle('complete-onboarding', () => {
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+      if (getMicStatus() !== 'granted') {
+        throw new Error('Microphone permission must be granted before onboarding can finish.')
+      }
+    }
+    if (process.platform === 'darwin') {
+      if (getScreenStatus() !== 'granted' || !getAccessibilityStatus(false)) {
+        throw new Error(
+          'Screen Recording and Accessibility permissions must be granted before onboarding can finish.'
+        )
+      }
+    }
     setOnboardingComplete(true)
     if (process.platform === 'darwin') {
       relaunchApp()
@@ -440,9 +524,6 @@ app.whenReady().then(async () => {
   if (isOnboardingComplete()) {
     startServices()
   }
-
-  autoUpdater.logger = log
-  autoUpdater.checkForUpdatesAndNotify()
 
   const trayImage =
     process.platform === 'darwin'
@@ -476,7 +557,10 @@ app.on('before-quit', () => {
   isQuitting = true
   if (cognitionTimer) clearInterval(cognitionTimer)
   cognitionTimer = null
-  void cognition?.store.consolidate().catch((error) => {
+  if (cognitiveCycleTimer) clearInterval(cognitiveCycleTimer)
+  cognitiveCycleTimer = null
+  globalShortcut.unregisterAll()
+  void cognition?.sleep().catch((error) => {
     log.error(`[Cognition] final consolidation failed: ${error}`)
   })
   stopPushToTalk()

@@ -27,6 +27,23 @@ import type {
   KnowledgeQueryResult,
   KnowledgeStats
 } from '../shared/knowledge'
+import type {
+  CapabilityInput,
+  CapabilityRecord,
+  CognitiveCycleResult,
+  PerceptionEvent,
+  PerceptionEventInput,
+  ReasoningAudit,
+  ReasoningAuditInput,
+  RuntimeStats,
+  SkillInput,
+  SkillMatch,
+  SkillOutcome,
+  SkillRecord,
+  SleepReport,
+  WorldEntityInput,
+  WorldSnapshot
+} from '../shared/runtime'
 
 export type KnownService = 'livekit' | 'openai' | 'google' | 'sarvam'
 
@@ -103,12 +120,31 @@ export type FridayAPI = {
     setGoalStatus: (goalId: string, status: GoalStatus) => Promise<Goal>
     stats: () => Promise<PlanningStats>
   }
+  runtime: {
+    ingest: (input: PerceptionEventInput) => Promise<PerceptionEvent>
+    cycle: () => Promise<CognitiveCycleResult>
+    sleep: () => Promise<SleepReport>
+    stats: () => Promise<RuntimeStats>
+    updateWorld: (input: WorldEntityInput) => Promise<unknown>
+    worldSnapshot: () => Promise<WorldSnapshot>
+    learnSkill: (input: SkillInput) => Promise<SkillRecord>
+    matchSkills: (query: string, limit?: number) => Promise<SkillMatch[]>
+    recordSkillOutcome: (input: SkillOutcome) => Promise<SkillRecord>
+    updateCapability: (input: CapabilityInput) => Promise<CapabilityRecord>
+    auditReasoning: (input: ReasoningAuditInput) => Promise<ReasoningAudit>
+    selfSnapshot: () => Promise<{
+      capabilities: CapabilityRecord[]
+      recentAudits: ReasoningAudit[]
+    }>
+    emergencyStop: () => Promise<void>
+    resetEmergencyStop: (userConfirmed: boolean) => Promise<void>
+  }
   getAgentConfig: () => Promise<AgentConfig>
   captureScreen: () => Promise<{ image: string }>
   describeScreen: (question: string) => Promise<string>
   webSearch: (query: string) => Promise<{ started: boolean; busy?: boolean }>
   computerAction: (action: ComputerAction) => Promise<{ ok: boolean; error?: string }>
-  controlComputer: (task: string) => Promise<string>
+  controlComputer: (task: string, approved?: boolean) => Promise<string>
   store: {
     initialOnboardingComplete: boolean
     isOnboardingComplete: () => Promise<boolean>
