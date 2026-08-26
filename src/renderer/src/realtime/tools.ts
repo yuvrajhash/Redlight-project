@@ -32,7 +32,11 @@ export function createFridayTools({
   consumeFreshApproval: (requestedAt: number) => boolean
 }) {
   const effectiveVisionMode = controlBrain === 'realtime' ? 'direct' : visionMode
-  let pendingApproval: { goalId: string; stepId: string; requestedAt: number } | null = null
+  let pendingApproval: {
+    goalId: string
+    stepId: string
+    requestedAt: number
+  } | null = null
 
   const lookAtScreen = tool({
     name: 'look_at_screen',
@@ -48,6 +52,16 @@ export function createFridayTools({
       window.api.log('Tool', `look_at_screen (${effectiveVisionMode}): ${question}`)
       if (effectiveVisionMode === 'subagent') {
         const answer = await window.api.describeScreen(question)
+        void window.api.runtime.ingest({
+          modality: 'vision',
+          source: 'screen-analysis',
+          content: `Screen question: ${question}\nObserved answer: ${answer}`,
+          confidence: 0.72,
+          novelty: 0.65,
+          urgency: 0.35,
+          risk: 0.2,
+          userDirected: true
+        })
         void window.api.cognition
           .remember({
             kind: 'episodic',
@@ -63,6 +77,16 @@ export function createFridayTools({
       }
       const { image } = await window.api.captureScreen()
       if (!image) return 'Could not capture the screen right now, boss.'
+      void window.api.runtime.ingest({
+        modality: 'vision',
+        source: 'screen-capture',
+        content: `A fresh screenshot was captured to answer: ${question}`,
+        confidence: 0.98,
+        novelty: 0.55,
+        urgency: 0.3,
+        risk: 0.15,
+        userDirected: true
+      })
       inject({
         type: 'conversation.item.create',
         item: {
@@ -293,7 +317,11 @@ export function createFridayTools({
         constraints,
         source: 'user'
       })
-      return JSON.stringify({ id: goal.id, title: goal.title, status: goal.status })
+      return JSON.stringify({
+        id: goal.id,
+        title: goal.title,
+        status: goal.status
+      })
     }
   })
 
@@ -339,7 +367,10 @@ export function createFridayTools({
     parameters: z.object({}),
     execute: async () => {
       const [goals, actions] = await Promise.all([
-        window.api.planning.listGoals({ statuses: ['active', 'blocked'], limit: 10 }),
+        window.api.planning.listGoals({
+          statuses: ['active', 'blocked'],
+          limit: 10
+        }),
         window.api.planning.nextActions(10)
       ])
       return JSON.stringify({ goals, nextActions: actions })
@@ -385,7 +416,11 @@ export function createFridayTools({
       }
       const step = await window.api.planning.approveStep(goalId, stepId, true)
       pendingApproval = null
-      return JSON.stringify({ id: step.id, status: step.status, approvedAt: step.approvedAt })
+      return JSON.stringify({
+        id: step.id,
+        status: step.status,
+        approvedAt: step.approvedAt
+      })
     }
   })
 
@@ -409,6 +444,155 @@ export function createFridayTools({
     }
   })
 
+  const updateWorldState = tool({
+    name: 'update_world_state',
+    description:
+      'Updates Friday current world model from a fresh observation. Use only for directly observed application, window, document, device, person, task, object, place, or concept state. Never infer hidden state.',
+    parameters: z.object({
+      name: z.string(),
+      kind: z.enum([
+        'person',
+        'application',
+        'window',
+        'document',
+        'device',
+        'place',
+        'task',
+        'object',
+        'concept'
+      ]),
+      state: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+      confidence: z.number().min(0).max(1)
+    }),
+    execute: async ({ name, kind, state, confidence }) => {
+      const result = await window.api.runtime.updateWorld({
+        name,
+        kind,
+        state,
+        confidence
+      })
+      return JSON.stringify(result)
+    }
+  })
+
+  const learnProcedure = tool({
+    name: 'learn_procedure',
+    description:
+      'Stores a reusable procedure from an explicit user demonstration or a task with verified observed success. New procedures remain candidates until repeated successful outcomes verify them.',
+    parameters: z.object({
+      name: z.string(),
+      description: z.string(),
+      triggerPhrases: z.array(z.string()).optional(),
+      source: z.enum(['user', 'successful-task', 'verified-tool']),
+      steps: z
+        .array(
+          z.object({
+            instruction: z.string(),
+            expectedOutcome: z.string(),
+            risk: z.enum(['low', 'medium', 'high', 'critical'])
+          })
+        )
+        .min(1)
+        .max(30)
+    }),
+    execute: async ({ name, description, triggerPhrases, source, steps }) => {
+      const skill = await window.api.runtime.learnSkill({
+        name,
+        description,
+        triggerPhrases,
+        demonstration: { source, steps }
+      })
+      return JSON.stringify({
+        id: skill.id,
+        name: skill.name,
+        status: skill.status,
+        confidence: skill.confidence
+      })
+    }
+  })
+
+  const findProcedure = tool({
+    name: 'find_procedure',
+    description:
+      'Finds previously demonstrated procedures relevant to a task. Candidate procedures are guidance only; high-risk procedures always require approval.',
+    parameters: z.object({ query: z.string() }),
+    execute: async ({ query }) => {
+      const matches = await window.api.runtime.matchSkills(query, 5)
+      return JSON.stringify(
+        matches.map((match) => ({
+          id: match.skill.id,
+          name: match.skill.name,
+          status: match.skill.status,
+          confidence: match.skill.confidence,
+          steps: match.skill.steps,
+          executable: match.executable,
+          reason: match.reason
+        }))
+      )
+    }
+  })
+
+  const recordProcedureOutcome = tool({
+    name: 'record_procedure_outcome',
+    description:
+      'Updates a learned procedure only after its outcome was directly observed. Never mark success based solely on an attempted action or an assistant claim.',
+    parameters: z.object({
+      skillId: z.string(),
+      succeeded: z.boolean(),
+      evidence: z.string().min(1)
+    }),
+    execute: async ({ skillId, succeeded, evidence }) => {
+      const skill = await window.api.runtime.recordSkillOutcome({
+        skillId,
+        succeeded,
+        evidence
+      })
+      return JSON.stringify({
+        id: skill.id,
+        status: skill.status,
+        confidence: skill.confidence,
+        successes: skill.successes,
+        failures: skill.failures
+      })
+    }
+  })
+
+  const updateCapability = tool({
+    name: 'update_capability_state',
+    description:
+      'Updates Friday self-model after direct evidence shows a capability is available, degraded, or unavailable. This prevents claiming abilities that are currently broken.',
+    parameters: z.object({
+      name: z.string(),
+      state: z.enum(['available', 'degraded', 'unavailable']),
+      confidence: z.number().min(0).max(1),
+      evidence: z.string().min(1)
+    }),
+    execute: async (input) => window.api.runtime.updateCapability(input)
+  })
+
+  const auditReasoning = tool({
+    name: 'audit_reasoning',
+    description:
+      'Audits a proposed conclusion before presenting or acting on it. Use for high-stakes, uncertain, contradictory, or multi-step reasoning. Disclose unsupported assumptions and calibrated confidence.',
+    parameters: z.object({
+      question: z.string(),
+      conclusion: z.string(),
+      assumptions: z.array(z.string()),
+      evidence: z.array(z.string()),
+      confidence: z.number().min(0).max(1),
+      externallyVerified: z.boolean()
+    }),
+    execute: async (input) => window.api.runtime.auditReasoning(input)
+  })
+
+  const cognitiveStatus = tool({
+    name: 'cognitive_status',
+    description:
+      'Inspects Friday current cognitive runtime, including queued perceptions, world model size, learned skills, reasoning audits, sleep cycles, and emergency-stop state.',
+    parameters: z.object({}),
+    execute: async () => window.api.runtime.stats()
+  })
+
   return [
     lookAtScreen,
     searchWeb,
@@ -424,41 +608,79 @@ export function createFridayTools({
     beginGoalStep,
     approveGoalStep,
     resolveGoalStep,
-    ...createControlTools(controlBrain)
+    updateWorldState,
+    learnProcedure,
+    findProcedure,
+    recordProcedureOutcome,
+    updateCapability,
+    auditReasoning,
+    cognitiveStatus,
+    ...createControlTools(controlBrain, consumeFreshApproval)
   ]
 }
 
-function createControlTools(controlBrain: ControlBrain) {
+function createControlTools(
+  controlBrain: ControlBrain,
+  consumeFreshApproval: (requestedAt: number) => boolean
+) {
   if (controlBrain === 'realtime') {
     return [clickScreen, typeText, pressKey, scrollScreen]
   }
-  return [controlComputer]
+  return [createControlComputerTool(consumeFreshApproval)]
 }
 
-const controlComputer = tool({
-  name: 'control_computer',
-  description: `Carries out a multi-step task directly on the boss's computer — opening apps, clicking, typing, navigating, searching, filling forms. Hand off the WHOLE task in plain language (e.g. "open Chrome and search for pizza", "play Daft Punk on Spotify", "close this window"). A specialist vision agent takes over, sees the screen, does the task step by step, and reports back what it did. Say a short filler line FIRST, then call this; it runs a few seconds.`,
-  parameters: z.object({
-    task: z
-      .string()
-      .describe('The full task in plain language, e.g. "open Spotify and play Daft Punk".')
-  }),
-  execute: async ({ task }) => {
-    window.api.log('Tool', `control_computer: ${task}`)
-    const result = await window.api.controlComputer(task)
-    void window.api.cognition
-      .remember({
-        kind: 'procedural',
-        content: `Computer task: ${task}\nOutcome: ${result}`,
-        source: 'tool',
-        tags: ['computer-control', 'task-outcome'],
-        confidence: /done|complete|opened|finished/i.test(result) ? 0.75 : 0.45,
-        salience: 0.68
+function createControlComputerTool(consumeFreshApproval: (requestedAt: number) => boolean) {
+  let pending: { task: string; requestedAt: number } | null = null
+  return tool({
+    name: 'control_computer',
+    description: `Carries out a multi-step task directly on the boss's computer — opening apps, clicking, typing, navigating, searching, filling forms. Hand off the WHOLE task in plain language (e.g. "open Chrome and search for pizza", "play Daft Punk on Spotify", "close this window"). A specialist vision agent takes over, sees the screen, does the task step by step, and reports back what it did. Say a short filler line FIRST, then call this; it runs a few seconds.`,
+    parameters: z.object({
+      task: z
+        .string()
+        .describe('The full task in plain language, e.g. "open Spotify and play Daft Punk".')
+    }),
+    execute: async ({ task }) => {
+      const consequential =
+        /\b(send|post|publish|submit|pay|purchase|buy|delete|erase|refund|install|uninstall|password|otp|account settings|security settings|change budget)\b/i.test(
+          task
+        )
+      let approved = false
+      if (consequential) {
+        if (!pending || pending.task !== task) {
+          pending = { task, requestedAt: Date.now() }
+          return `Approval required. Explain the exact consequential action: "${task}" and ask for explicit confirmation. Do not execute yet.`
+        }
+        approved = consumeFreshApproval(pending.requestedAt)
+        if (!approved)
+          return 'Approval denied: no fresh explicit confirmation matched this computer task.'
+        pending = null
+      }
+      window.api.log('Tool', `control_computer: ${task}`)
+      const result = await window.api.controlComputer(task, approved)
+      void window.api.runtime.ingest({
+        modality: 'tool',
+        source: 'computer-control',
+        content: `Computer task: ${task}\nObserved result: ${result}`,
+        confidence: /done|complete|opened|finished/i.test(result) ? 0.78 : 0.45,
+        novelty: 0.65,
+        urgency: 0.25,
+        risk: consequential ? 0.9 : 0.35,
+        userDirected: true
       })
-      .catch((error) => window.api.log('Cognition', `failed to remember task outcome: ${error}`))
-    return result
-  }
-})
+      void window.api.cognition
+        .remember({
+          kind: 'procedural',
+          content: `Computer task: ${task}\nOutcome: ${result}`,
+          source: 'tool',
+          tags: ['computer-control', 'task-outcome'],
+          confidence: /done|complete|opened|finished/i.test(result) ? 0.75 : 0.45,
+          salience: 0.68
+        })
+        .catch((error) => window.api.log('Cognition', `failed to remember task outcome: ${error}`))
+      return result
+    }
+  })
+}
 
 const clickScreen = tool({
   name: 'click_screen',

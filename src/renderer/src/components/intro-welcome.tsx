@@ -159,6 +159,7 @@ export function PermissionsStep({
   const [mic, setMic] = useState<RowStatus>('idle')
   const [screen, setScreen] = useState<RowStatus>('idle')
   const [a11y, setA11y] = useState<RowStatus>('idle')
+  const allGranted = mic === 'granted' && (!isMac || (screen === 'granted' && a11y === 'granted'))
 
   const refresh = async () => {
     const micStatus = await window.api.permissions.getMicStatus()
@@ -181,10 +182,8 @@ export function PermissionsStep({
   }, [isMac])
 
   useEffect(() => {
-    const all =
-      mic === 'granted' && (!isMac || (screen === 'granted' && a11y === 'granted'))
-    onGranted(all || !isMac)
-  }, [mic, screen, a11y, isMac, onGranted])
+    onGranted(allGranted)
+  }, [allGranted, onGranted])
 
   const requestMic = async () => {
     setMic('pending')
@@ -237,8 +236,8 @@ export function PermissionsStep({
           </>
         )}
       </div>
-      <Button onClick={onContinue} className="mt-2 w-full">
-        Continue
+      <Button onClick={onContinue} disabled={!allGranted} className="mt-2 w-full">
+        {allGranted ? 'Continue' : 'Grant required permissions'}
       </Button>
     </div>
   )

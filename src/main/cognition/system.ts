@@ -6,19 +6,40 @@ import type {
 } from '../../shared/cognition'
 import type { GoalInput, GoalPlanInput, GoalQuery, GoalStatus } from '../../shared/planning'
 import type { BeliefInput, KnowledgeQuery } from '../../shared/knowledge'
+import type {
+  CapabilityInput,
+  PerceptionEventInput,
+  ReasoningAuditInput,
+  SkillInput,
+  SkillOutcome,
+  WorldEntityInput
+} from '../../shared/runtime'
 import { KnowledgeGraph } from './knowledge-graph.ts'
+import { SelfModel } from './metacognition.ts'
 import { GoalPlanner } from './planner.ts'
+import { CognitiveRuntime } from './runtime.ts'
+import { ExecutionSupervisor } from './safety.ts'
+import { SkillLibrary } from './skills.ts'
 import { CognitionStore, type CognitionStoreOptions } from './store.ts'
+import { WorldModel } from './world-model.ts'
 
 export type CognitiveSystemOptions = CognitionStoreOptions & {
   planningFilePath?: string
   knowledgeFilePath?: string
+  worldFilePath?: string
+  skillsFilePath?: string
+  selfFilePath?: string
 }
 
 export class CognitiveSystem {
   readonly store: CognitionStore
   readonly planner: GoalPlanner
   readonly knowledge: KnowledgeGraph
+  readonly world: WorldModel
+  readonly skills: SkillLibrary
+  readonly self: SelfModel
+  readonly supervisor: ExecutionSupervisor
+  readonly runtime: CognitiveRuntime
 
   constructor(options: CognitiveSystemOptions) {
     this.store = new CognitionStore(options)
@@ -30,13 +51,39 @@ export class CognitiveSystem {
       filePath: options.knowledgeFilePath ?? `${options.filePath}.knowledge`,
       now: options.now
     })
+    this.world = new WorldModel({
+      filePath: options.worldFilePath ?? `${options.filePath}.world`,
+      now: options.now
+    })
+    this.skills = new SkillLibrary({
+      filePath: options.skillsFilePath ?? `${options.filePath}.skills`,
+      now: options.now
+    })
+    this.self = new SelfModel({
+      filePath: options.selfFilePath ?? `${options.filePath}.self`,
+      now: options.now
+    })
+    this.supervisor = new ExecutionSupervisor()
+    this.runtime = new CognitiveRuntime({
+      store: this.store,
+      planner: this.planner,
+      knowledge: this.knowledge,
+      world: this.world,
+      skills: this.skills,
+      self: this.self,
+      supervisor: this.supervisor,
+      now: options.now
+    })
   }
 
   async initialize(): Promise<void> {
     await Promise.all([
       this.store.initialize(),
       this.planner.initialize(),
-      this.knowledge.initialize()
+      this.knowledge.initialize(),
+      this.world.initialize(),
+      this.skills.initialize(),
+      this.self.initialize()
     ])
   }
 
@@ -69,7 +116,51 @@ export class CognitiveSystem {
   }
 
   async clearAll(): Promise<void> {
-    await Promise.all([this.store.clear(), this.planner.clear(), this.knowledge.clear()])
+    this.runtime.clearVolatile()
+    await Promise.all([
+      this.store.clear(),
+      this.planner.clear(),
+      this.knowledge.clear(),
+      this.world.clear(),
+      this.skills.clear(),
+      this.self.clear()
+    ])
+  }
+
+  ingestPerception(input: PerceptionEventInput) {
+    return this.runtime.ingest(input)
+  }
+
+  updateWorld(input: WorldEntityInput) {
+    return this.runtime.updateWorld(input)
+  }
+
+  runCycle() {
+    return this.runtime.cycle()
+  }
+
+  sleep() {
+    return this.runtime.sleep()
+  }
+
+  learnSkill(input: SkillInput) {
+    return this.skills.learn(input)
+  }
+
+  matchSkills(query: string, limit?: number) {
+    return this.skills.match(query, limit)
+  }
+
+  recordSkillOutcome(input: SkillOutcome) {
+    return this.skills.recordOutcome(input)
+  }
+
+  updateCapability(input: CapabilityInput) {
+    return this.self.updateCapability(input)
+  }
+
+  auditReasoning(input: ReasoningAuditInput) {
+    return this.self.audit(input)
   }
 
   createGoal(input: GoalInput) {
@@ -131,8 +222,14 @@ export class CognitiveSystem {
       limit: 8,
       includeContested: true
     })
-    const goals = this.planner.listGoals({ statuses: ['active', 'blocked'], limit: 5 })
+    const goals = this.planner.listGoals({
+      statuses: ['active', 'blocked'],
+      limit: 5
+    })
     const actions = this.planner.nextActions(5)
+    const world = this.world.find(query.query, 6)
+    const skills = this.skills.match(query.query, 4)
+    const self = this.self.snapshot()
     const memoryText = memories
       .map(
         (memory) =>
@@ -154,6 +251,25 @@ export class CognitiveSystem {
           `- [${fact.status}; confidence ${fact.confidence.toFixed(2)}] ${fact.subject.name} ${fact.predicate} ${fact.object.name}`
       )
       .join('\n')
+    const worldText = world
+      .map(
+        (entity) =>
+          `- [${entity.kind}; confidence ${entity.confidence.toFixed(2)}] ${entity.name}: ${JSON.stringify(entity.state)}`
+      )
+      .join('\n')
+    const skillText = skills
+      .map(
+        (match) =>
+          `- [${match.skill.status}; confidence ${match.skill.confidence.toFixed(2)}] ${match.skill.name}: ${match.reason}`
+      )
+      .join('\n')
+    const capabilityText = self.capabilities
+      .filter((capability) => capability.state !== 'available')
+      .map(
+        (capability) =>
+          `- [${capability.state}; confidence ${capability.confidence.toFixed(2)}] ${capability.name}: ${capability.evidence}`
+      )
+      .join('\n')
     const sections = [
       memoryText
         ? `Relevant long-term memory (treat as fallible context, not unquestionable fact):\n${memoryText}`
@@ -161,6 +277,13 @@ export class CognitiveSystem {
       knowledgeText
         ? `Connected knowledge (contested relationships must be disclosed):\n${knowledgeText}`
         : '',
+      worldText
+        ? `Current world model (state may become stale; verify before acting):\n${worldText}`
+        : '',
+      skillText
+        ? `Relevant learned procedures (candidate skills are not executable):\n${skillText}`
+        : '',
+      capabilityText ? `Known degraded or unavailable capabilities:\n${capabilityText}` : '',
       goalText ? `Current goals:\n${goalText}` : '',
       actionText
         ? `Candidate next actions (never bypass approval requirements):\n${actionText}`

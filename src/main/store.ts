@@ -60,7 +60,10 @@ export function getApiKey(service: KnownService): string | null {
   const storedValue = keys[service]
   if (!storedValue) return null
   if (storedValue.startsWith('RAW_')) {
-    return storedValue.replace('RAW_', '')
+    delete keys[service]
+    store.set('encryptedApiKeys', keys)
+    console.error(`Removed insecure legacy API key storage for service: ${service}`)
+    return null
   }
   if (storedValue.startsWith('ENC_')) {
     if (!safeStorage.isEncryptionAvailable()) {

@@ -39,6 +39,7 @@ export function Onboarding({
   const [permsGranted, setPermsGranted] = useState(false)
   const inverted = step === 'permissions' && permsGranted
   const [finishing, setFinishing] = useState(false)
+  const [finishError, setFinishError] = useState('')
   const musicSection = {
     welcome: { start: 0, end: 27.5 },
     permissions: { start: 40, end: 142 },
@@ -53,8 +54,14 @@ export function Onboarding({
 
   const finishOnboarding = useCallback(async () => {
     setFinishing(true)
-    await playOutro()
-    await onComplete()
+    setFinishError('')
+    try {
+      await playOutro()
+      await onComplete()
+    } catch (error) {
+      setFinishError(error instanceof Error ? error.message : 'Could not finish setup.')
+      setFinishing(false)
+    }
   }, [onComplete, playOutro])
 
   return (
@@ -95,10 +102,7 @@ export function Onboarding({
             <div className="relative z-10 h-full">
               {step === 'welcome' && <IntroWelcome onStart={() => setStep('permissions')} />}
               {step === 'permissions' && (
-                <PermissionsStep
-                  onGranted={setPermsGranted}
-                  onContinue={() => setStep('byok')}
-                />
+                <PermissionsStep onGranted={setPermsGranted} onContinue={() => setStep('byok')} />
               )}
               {step === 'byok' && <BYOKSetup onComplete={() => void finishOnboarding()} />}
             </div>
@@ -111,6 +115,9 @@ export function Onboarding({
             {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
             {muted ? 'Unmute' : 'Mute'}
           </button>
+          {finishError ? (
+            <p className="max-w-md text-center text-xs text-red-300">{finishError}</p>
+          ) : null}
         </div>
       </motion.div>
     </div>

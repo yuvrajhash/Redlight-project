@@ -90,6 +90,18 @@ export function useFridaySession(): FridaySessionValue {
           }
         }
         window.api.log('Transcript', `user transcript captured (${transcript.length} chars)`)
+        void window.api.runtime
+          .ingest({
+            modality: 'language',
+            source: 'user-voice',
+            content: transcript,
+            confidence: 0.98,
+            novelty: 0.65,
+            urgency: /urgent|immediately|now|emergency/i.test(transcript) ? 0.9 : 0.25,
+            risk: /delete|pay|purchase|password|otp|send/i.test(transcript) ? 0.8 : 0.15,
+            userDirected: true
+          })
+          .catch((error) => window.api.log('Cognition', `failed to ingest user turn: ${error}`))
         void window.api.cognition
           .remember({
             kind: 'episodic',
@@ -105,6 +117,17 @@ export function useFridaySession(): FridaySessionValue {
       if (event.transcript) {
         const transcript = event.transcript.trim()
         window.api.log('Transcript', `assistant transcript captured (${transcript.length} chars)`)
+        void window.api.runtime
+          .ingest({
+            modality: 'language',
+            source: 'friday-response',
+            content: transcript,
+            confidence: 0.7,
+            novelty: 0.35,
+            urgency: 0.1,
+            risk: 0.1
+          })
+          .catch((error) => window.api.log('Cognition', `failed to ingest response: ${error}`))
         void window.api.cognition
           .remember({
             kind: 'reflection',
@@ -317,6 +340,15 @@ Result:
 ${payload.answer}`
         : "Your background internet search failed. Tell the boss briefly you couldn't pull it up right now."
       if (payload.answer) {
+        void window.api.runtime.ingest({
+          modality: 'tool',
+          source: 'web-search',
+          content: payload.answer,
+          confidence: 0.82,
+          novelty: 0.7,
+          urgency: 0.35,
+          risk: 0.1
+        })
         void window.api.cognition
           .remember({
             kind: 'semantic',

@@ -492,6 +492,11 @@ function extractCuaText(output: Array<Record<string, unknown>>): string {
 }
 
 let controlLoopActive = false
+let controlLoopCancelled = false
+
+export function stopComputerUseLoop(): void {
+  controlLoopCancelled = true
+}
 
 export async function runComputerUseLoop(task: string): Promise<string> {
   if (!getApiKey('openai')) return 'Computer control is unavailable right now, boss.'
@@ -500,6 +505,7 @@ export async function runComputerUseLoop(task: string): Promise<string> {
     return "I'm still working on the last thing, boss - give me a moment, I'll let you know when it's done."
   }
   controlLoopActive = true
+  controlLoopCancelled = false
   const MAX_STEPS = 12
   const tools = [{ type: 'computer' }]
   broadcast('computer-control', { active: true })
@@ -516,6 +522,7 @@ Use the computer tool to carry this out on the user's screen. When the task is c
     })
     let lastDims = { width: 1920, height: 1080 }
     for (let step = 0; step < MAX_STEPS; step++) {
+      if (controlLoopCancelled) return 'Computer control was stopped by the user.'
       const output = (response.output || []) as Array<Record<string, unknown>>
       const call = output.find((o) => o.type === 'computer_call')
       if (!call) {
@@ -536,7 +543,10 @@ Use the computer tool to carry this out on the user's screen. When the task is c
         (call.actions as Array<Record<string, unknown>>) ||
         (call.action ? [call.action as Record<string, unknown>] : [])
       log.info(`[CUA] step ${step + 1}: ${actions.map((a) => a.type).join(', ') || '(none)'}`)
-      for (const action of actions) await executeCuaAction(action, lastDims.width, lastDims.height)
+      for (const action of actions) {
+        if (controlLoopCancelled) return 'Computer control was stopped by the user.'
+        await executeCuaAction(action, lastDims.width, lastDims.height)
+      }
       await sleep(450)
       const shot = await captureScreenForControl()
       lastDims = { width: shot.width, height: shot.height }
