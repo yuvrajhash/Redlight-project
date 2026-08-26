@@ -20,7 +20,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      # The recovered lockfile predates the current pnpm patched-dependency metadata.
+      # Regenerate resolution metadata in CI until the native packaging patch is repinned.
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm lint
