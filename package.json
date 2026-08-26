@@ -24,6 +24,7 @@
     "build:linux": "pnpm build && electron-builder --linux",
     "postinstall": "node scripts/postinstall.mjs",
     "lint": "eslint --cache .",
+    "test": "node --experimental-strip-types --test src/main/cognition/*.test.ts",
     "format": "prettier --write ."
   },
   "dependencies": {
