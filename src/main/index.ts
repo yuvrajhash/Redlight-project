@@ -52,12 +52,9 @@ import {
   stopPushToTalk,
   type ComputerAction
 } from './os'
-import {
-  describeScreen,
-  getAgentConfig,
-  runComputerUseLoop,
-  startBackgroundSearch
-} from './brains'
+import { describeScreen, getAgentConfig, runComputerUseLoop, startBackgroundSearch } from './brains'
+import { CognitiveSystem } from './cognition/system'
+import type { MemoryQuery, MemoryRecordInput, ObservationInput } from '../shared/cognition'
 
 dotenvConfig({
   path: app.isPackaged
@@ -67,11 +64,14 @@ dotenvConfig({
 
 const icon = join(__dirname, '../../resources/icon.png')
 const REALTIME_MODEL = 'gpt-realtime'
+const COGNITIVE_CONSOLIDATION_MS = 15 * 60 * 1000
 
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let triggerServerStarted = false
+let cognition: CognitiveSystem | null = null
+let cognitionTimer: NodeJS.Timeout | null = null
 
 function broadcast(channel: string, payload?: unknown): void {
   BrowserWindow.getAllWindows().forEach((win) => win.webContents.send(channel, payload))
@@ -210,11 +210,28 @@ function showOrCreateWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.feynmanpi.friday')
   Menu.setApplicationMenu(null)
   nativeTheme.themeSource = 'dark'
   logPermissionDiagnostics()
+
+  cognition = new CognitiveSystem({
+    filePath: join(app.getPath('userData'), 'cognition-v1.json')
+  })
+  try {
+    await cognition.initialize()
+    log.info(`[Cognition] initialized with ${cognition.store.stats().totalMemories} memories`)
+  } catch (error) {
+    log.error(`[Cognition] failed to load persisted memory; starting empty: ${error}`)
+  }
+  cognitionTimer = setInterval(() => {
+    void cognition?.store
+      .consolidate()
+      .then((result) => log.info(`[Cognition] consolidation complete: ${JSON.stringify(result)}`))
+      .catch((error) => log.error(`[Cognition] consolidation failed: ${error}`))
+  }, COGNITIVE_CONSOLIDATION_MS)
+  cognitionTimer.unref()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -225,6 +242,19 @@ app.whenReady().then(() => {
     log.info(`[${scope}] ${message}`)
   })
 
+  ipcMain.handle('cognition:remember', (_event, input: MemoryRecordInput) =>
+    cognition?.remember(input)
+  )
+  ipcMain.handle('cognition:observe', (_event, input: ObservationInput) =>
+    cognition?.observe(input)
+  )
+  ipcMain.handle('cognition:recall', (_event, query: MemoryQuery) => cognition?.recall(query))
+  ipcMain.handle('cognition:context', (_event, query: MemoryQuery) => cognition?.context(query))
+  ipcMain.handle('cognition:audit', (_event, claim: string) => cognition?.auditClaim(claim))
+  ipcMain.handle('cognition:stats', () => cognition?.store.stats())
+  ipcMain.handle('cognition:consolidate', () => cognition?.store.consolidate())
+  ipcMain.handle('cognition:clear', () => cognition?.store.clear())
+
   ipcMain.handle('store:isOnboardingComplete', () => isOnboardingComplete())
   ipcMain.handle('store:setOnboardingComplete', (_event, value: boolean) => {
     setOnboardingComplete(value)
@@ -232,7 +262,6 @@ app.whenReady().then(() => {
   ipcMain.handle('store:saveApiKey', (_event, service: KnownService, key: string) => {
     saveApiKey(service, key)
   })
-  ipcMain.handle('store:getApiKey', (_event, service: KnownService) => getApiKey(service))
   ipcMain.handle('store:deleteApiKey', (_event, service: KnownService) => {
     deleteApiKey(service)
   })
@@ -285,14 +314,19 @@ app.whenReady().then(() => {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ session: { type: 'realtime', model: REALTIME_MODEL } })
+      body: JSON.stringify({
+        session: { type: 'realtime', model: REALTIME_MODEL }
+      })
     })
     const text = await res.text()
     if (!res.ok) {
       log.error(`[Realtime] ephemeral key mint failed ${res.status}: ${text.slice(0, 300)}`)
       throw new Error(`OpenAI ephemeral key request failed: ${res.status}`)
     }
-    const data = JSON.parse(text) as { value?: string; client_secret?: { value?: string } }
+    const data = JSON.parse(text) as {
+      value?: string
+      client_secret?: { value?: string }
+    }
     const value = data.value ?? data.client_secret?.value
     if (!value) {
       log.error(`[Realtime] ephemeral key response missing value: ${text.slice(0, 300)}`)
@@ -407,6 +441,11 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  if (cognitionTimer) clearInterval(cognitionTimer)
+  cognitionTimer = null
+  void cognition?.store.consolidate().catch((error) => {
+    log.error(`[Cognition] final consolidation failed: ${error}`)
+  })
   stopPushToTalk()
 })
 
