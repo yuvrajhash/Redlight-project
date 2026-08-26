@@ -13,7 +13,7 @@ export default tseslint.config(
   },
   tseslint.configs.recommended,
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ['**/*.{js,mjs,cjs,ts,tsx}'],
     rules: {
       // The recovered application relies on inferred return types, native module shims,
       // and a triple-slash bridge for its renderer environment declaration.
