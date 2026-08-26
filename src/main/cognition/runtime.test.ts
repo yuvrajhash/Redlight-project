@@ -13,7 +13,7 @@ import { WorldModel } from './world-model.ts'
 const FIXED_NOW = new Date('2026-08-27T00:00:00.000Z')
 
 async function tempFile(name: string) {
-  const directory = await mkdtemp(join(tmpdir(), 'friday-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'yuv-runtime-'))
   return join(directory, name)
 }
 
@@ -35,7 +35,7 @@ describe('Perception and world model', () => {
     buffer.ingest({
       modality: 'language',
       source: 'user',
-      content: 'Friday, inspect this error',
+      content: 'YUV, inspect this error',
       userDirected: true
     })
     buffer.ingest({
@@ -194,7 +194,7 @@ describe('Metacognition and execution safety', () => {
 
 describe('Integrated cognitive runtime', () => {
   it('runs perception, memory, world-state, goals, skills, reflection and sleep as one cycle', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'friday-integrated-'))
+    const directory = await mkdtemp(join(tmpdir(), 'yuv-integrated-'))
     const system = new CognitiveSystem({
       filePath: join(directory, 'memory.json'),
       planningFilePath: join(directory, 'planning.json'),
@@ -265,14 +265,14 @@ describe('Integrated cognitive runtime', () => {
   })
 
   it('clears every persistent and volatile cognitive subsystem', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'friday-clear-v4-'))
+    const directory = await mkdtemp(join(tmpdir(), 'yuv-clear-v4-'))
     const system = new CognitiveSystem({
       filePath: join(directory, 'memory.json'),
       now: () => FIXED_NOW
     })
     await system.initialize()
     await system.updateWorld({
-      name: 'Friday',
+      name: 'YUV',
       kind: 'concept',
       state: { active: true }
     })

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { FridayUser, KnownService, ProviderConfig } from '../../../preload/types'
+import type { KnownService, PrivacySettings, ProviderConfig } from '../../../preload/types'
 
 export function useStore() {
   return useMemo(
@@ -13,8 +13,10 @@ export function useStore() {
       validateOpenAiKey: (key: string) => window.api.store.validateOpenAiKey(key),
       getProviderConfig: () => window.api.store.getProviderConfig(),
       setProviderConfig: (config: ProviderConfig) => window.api.store.setProviderConfig(config),
-      resetStore: () => window.api.store.resetStore(),
-      getUser: (): Promise<FridayUser | null> => window.api.auth.getUser()
+      getPrivacySettings: () => window.api.store.getPrivacySettings(),
+      setPrivacySettings: (settings: PrivacySettings) =>
+        window.api.store.setPrivacySettings(settings),
+      resetStore: () => window.api.store.resetStore()
     }),
     []
   )

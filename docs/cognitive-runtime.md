@@ -1,6 +1,6 @@
-# Friday cognitive runtime
+# YUV cognitive runtime
 
-Friday's cognitive runtime is a persistent, inspectable architecture around the foundation model. It is not consciousness and it does not let the model rewrite its own code.
+YUV's cognitive runtime is a persistent, inspectable architecture around the foundation model. It is not consciousness and it does not let the model rewrite its own code.
 
 ## Cognitive cycle
 
@@ -37,10 +37,10 @@ Data is stored under Electron's local `userData` directory. **Forget all** clear
 - `Ctrl/Cmd + Shift + F12` immediately locks computer control and cancels the active computer-use loop.
 - Resetting the emergency stop requires an explicit user action in Settings.
 - Computer tasks retain the existing step limit and screen refresh loop.
-- Primary-display capture is matched by Electron display ID, and pointer coordinates use that display's real bounds.
+- The selected display is matched by Electron display ID, and pointer coordinates use that display's real bounds.
 - Onboarding cannot complete without the required microphone, screen-recording, and accessibility permissions on supported platforms.
 - Legacy plaintext API-key entries are deleted instead of decrypted or reused.
-- Automatic updates remain disabled until a real signed release endpoint replaces the recovered placeholder URL.
+- Update metadata targets the owner-controlled GitHub repository; installation still requires a signed release.
 
 ## Honest limits
 

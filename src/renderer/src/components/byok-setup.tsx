@@ -43,7 +43,7 @@ export function BYOKSetup({ onComplete }: { onComplete: () => void }) {
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="space-y-1">
             <h1 className="text-2xl font-light tracking-tight">
-              configure <span className="font-playfair font-medium italic">friday</span>
+              configure <span className="font-playfair font-medium italic">yuv</span>
             </h1>
           </div>
         </div>

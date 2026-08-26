@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 
-export type SearchSource = { title: string; url: string; favicon: string | null }
+export type SearchSource = {
+  title: string
+  url: string
+  favicon: string | null
+}
 
 export function SearchSourcesPanel() {
   const [sources, setSources] = useState<SearchSource[]>([])

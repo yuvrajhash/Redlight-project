@@ -6,7 +6,7 @@ import { describe, it } from 'node:test'
 import { KnowledgeGraph } from './knowledge-graph.ts'
 
 async function createGraph(now = new Date('2026-08-27T00:00:00.000Z')) {
-  const directory = await mkdtemp(join(tmpdir(), 'friday-knowledge-'))
+  const directory = await mkdtemp(join(tmpdir(), 'yuv-knowledge-'))
   const filePath = join(directory, 'knowledge.json')
   const graph = new KnowledgeGraph({ filePath, now: () => now })
   await graph.initialize()

@@ -1,6 +1,5 @@
 import { config as dotenvConfig } from 'dotenv'
 import { join } from 'path'
-import { exec } from 'child_process'
 import { createServer } from 'http'
 import {
   app,
@@ -15,20 +14,24 @@ import {
   Tray
 } from 'electron'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 import log from './logger'
 import {
   deleteApiKey,
   getApiKey,
   getProviderConfig,
-  getUser,
+  getPrivacySettings,
+  getSelectedDisplayId,
   isOnboardingComplete,
   resetStore,
   saveApiKey,
   setOnboardingComplete,
   setProviderConfig,
-  setUser,
+  setPrivacySettings,
+  setSelectedDisplayId,
   type KnownService,
-  type ProviderConfig
+  type ProviderConfig,
+  type PrivacySettings
 } from './store'
 import { validateGoogleApiKey, validateOpenAiApiKey } from './validate-key'
 import {
@@ -44,10 +47,11 @@ import {
   requestMicAccess,
   triggerInputMonitoringPrompt
 } from './permissions'
-import { signInWithGoogle } from './auth'
 import {
   captureScreen,
+  listDisplays,
   runComputerAction,
+  selectDisplay,
   startPushToTalk,
   stopPushToTalk,
   type ComputerAction
@@ -60,6 +64,7 @@ import {
   stopComputerUseLoop
 } from './brains'
 import { CognitiveSystem } from './cognition/system'
+import { createCognitiveStorageCodec } from './secure-storage'
 import type { MemoryQuery, MemoryRecordInput, ObservationInput } from '../shared/cognition'
 import type { GoalInput, GoalPlanInput, GoalQuery, GoalStatus } from '../shared/planning'
 import type { BeliefInput, KnowledgeQuery } from '../shared/knowledge'
@@ -127,28 +132,9 @@ function createMainWindow(): void {
     mainWindow.setAlwaysOnTop(false)
     mainWindow.setIgnoreMouseEvents(false)
     mainWindow.setSkipTaskbar(false)
-    showDesktop(mainWindow)
   }
   wireWindow(mainWindow)
   loadRenderer(mainWindow)
-}
-
-function showDesktop(win: BrowserWindow): void {
-  if (process.platform !== 'win32') return
-  exec(
-    'powershell -NoProfile -Command "(New-Object -ComObject Shell.Application).MinimizeAll()"',
-    { windowsHide: true },
-    (err) => {
-      if (err) {
-        log.warn(`[startup] MinimizeAll failed: ${err.message}`)
-        return
-      }
-      if (win.isDestroyed()) return
-      if (win.isMinimized()) win.restore()
-      win.show()
-      win.focus()
-    }
-  )
 }
 
 function wireWindow(win: BrowserWindow): void {
@@ -184,6 +170,25 @@ function startServices(): void {
     void requestMicAccess()
     triggerServerStarted = true
   }
+}
+
+function startUpdater(): void {
+  if (!app.isPackaged) return
+  autoUpdater.logger = log
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('update-available', (info) =>
+    log.info(`[Updater] signed update available: ${info.version}`)
+  )
+  autoUpdater.on('update-downloaded', (info) =>
+    log.info(`[Updater] update ${info.version} downloaded; it will install on quit`)
+  )
+  autoUpdater.on('error', (error) => log.error(`[Updater] ${error}`))
+  setTimeout(() => {
+    void autoUpdater
+      .checkForUpdates()
+      .catch((error) => log.error(`[Updater] check failed: ${error}`))
+  }, 15_000).unref()
 }
 
 function startTriggerServer(): void {
@@ -225,27 +230,32 @@ function showOrCreateWindow(): void {
   if (isOnboardingComplete()) {
     startServices()
   }
+  startUpdater()
 }
 
 app.whenReady().then(async () => {
-  electronApp.setAppUserModelId('com.feynmanpi.friday')
+  electronApp.setAppUserModelId('com.yuvrajchoudhary.yuv')
   Menu.setApplicationMenu(null)
   nativeTheme.themeSource = 'dark'
+  selectDisplay(getSelectedDisplayId())
   logPermissionDiagnostics()
 
-  cognition = new CognitiveSystem({
-    filePath: join(app.getPath('userData'), 'cognition-v1.json'),
-    planningFilePath: join(app.getPath('userData'), 'planning-v1.json'),
-    knowledgeFilePath: join(app.getPath('userData'), 'knowledge-v1.json'),
-    worldFilePath: join(app.getPath('userData'), 'world-v1.json'),
-    skillsFilePath: join(app.getPath('userData'), 'skills-v1.json'),
-    selfFilePath: join(app.getPath('userData'), 'self-v1.json')
-  })
   try {
+    const codec = createCognitiveStorageCodec()
+    cognition = new CognitiveSystem({
+      filePath: join(app.getPath('userData'), 'cognition-v1.json'),
+      planningFilePath: join(app.getPath('userData'), 'planning-v1.json'),
+      knowledgeFilePath: join(app.getPath('userData'), 'knowledge-v1.json'),
+      worldFilePath: join(app.getPath('userData'), 'world-v1.json'),
+      skillsFilePath: join(app.getPath('userData'), 'skills-v1.json'),
+      selfFilePath: join(app.getPath('userData'), 'self-v1.json'),
+      codec
+    })
     await cognition.initialize()
     log.info(`[Cognition] initialized with ${cognition.store.stats().totalMemories} memories`)
   } catch (error) {
-    log.error(`[Cognition] failed to load persisted memory; starting empty: ${error}`)
+    cognition = null
+    log.error(`[Cognition] secure persistence unavailable; cognition disabled: ${error}`)
   }
   cognitionTimer = setInterval(() => {
     void cognition
@@ -278,12 +288,18 @@ app.whenReady().then(async () => {
     log.info(`[${scope}] ${message}`)
   })
 
-  ipcMain.handle('cognition:remember', (_event, input: MemoryRecordInput) =>
-    cognition?.remember(input)
-  )
-  ipcMain.handle('cognition:observe', (_event, input: ObservationInput) =>
-    cognition?.observe(input)
-  )
+  ipcMain.handle('cognition:remember', (_event, input: MemoryRecordInput) => {
+    const privacy = getPrivacySettings()
+    if (input.tags?.includes('conversation') && !privacy.storeConversationMemory) return null
+    if (input.tags?.includes('screen-observation') && !privacy.storeScreenMemory) return null
+    return cognition?.remember(input)
+  })
+  ipcMain.handle('cognition:observe', (_event, input: ObservationInput) => {
+    const privacy = getPrivacySettings()
+    if (input.tags?.includes('conversation') && !privacy.storeConversationMemory) return null
+    if (input.tags?.includes('screen-observation') && !privacy.storeScreenMemory) return null
+    return cognition?.observe(input)
+  })
   ipcMain.handle('cognition:recall', (_event, query: MemoryQuery) => cognition?.recall(query))
   ipcMain.handle('cognition:context', (_event, query: MemoryQuery) => cognition?.context(query))
   ipcMain.handle('cognition:audit', (_event, claim: string) => cognition?.auditClaim(claim))
@@ -319,9 +335,12 @@ app.whenReady().then(async () => {
     cognition?.setGoalStatus(goalId, status)
   )
   ipcMain.handle('planning:stats', () => cognition?.planner.stats())
-  ipcMain.handle('runtime:ingest', (_event, input: PerceptionEventInput) =>
-    cognition?.ingestPerception(input)
-  )
+  ipcMain.handle('runtime:ingest', (_event, input: PerceptionEventInput) => {
+    const privacy = getPrivacySettings()
+    if (input.modality === 'language' && !privacy.storeConversationMemory) return null
+    if (input.modality === 'vision' && !privacy.storeScreenMemory) return null
+    return cognition?.ingestPerception(input)
+  })
   ipcMain.handle('runtime:cycle', () => cognition?.runCycle())
   ipcMain.handle('runtime:sleep', () => cognition?.sleep())
   ipcMain.handle('runtime:stats', () => cognition?.runtime.stats())
@@ -372,6 +391,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('store:setProviderConfig', (_event, providerConfig: ProviderConfig) =>
     setProviderConfig(providerConfig)
   )
+  ipcMain.handle('store:getPrivacySettings', () => getPrivacySettings())
+  ipcMain.handle('store:setPrivacySettings', (_event, settings: PrivacySettings) =>
+    setPrivacySettings(settings)
+  )
+  ipcMain.handle('display:list', () => listDisplays())
+  ipcMain.handle('display:select', (_event, displayId: number | null) => {
+    selectDisplay(displayId)
+    setSelectedDisplayId(displayId)
+  })
   ipcMain.handle('store:resetStore', () => {
     resetStore()
   })
@@ -387,18 +415,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('permissions:triggerInputMonitoringPrompt', () => triggerInputMonitoringPrompt())
   ipcMain.handle('permissions:openInputMonitoringSettings', () => openInputMonitoringSettings())
   ipcMain.handle('permissions:requestMicAccess', () => requestMicAccess())
-
-  ipcMain.handle('auth:signInWithGoogle', async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    try {
-      return await signInWithGoogle()
-    } finally {
-      win?.show()
-      win?.focus()
-    }
-  })
-  ipcMain.handle('auth:getUser', () => getUser())
-  ipcMain.handle('auth:signOut', () => setUser(null))
 
   ipcMain.handle('realtime:mintEphemeralKey', async () => {
     const apiKey = getApiKey('openai')
@@ -449,7 +465,7 @@ app.whenReady().then(async () => {
       return answer
     } catch (err) {
       log.error(`[Vision] describeScreen failed: ${err}`)
-      return 'I could not make out the screen just now, boss.'
+      return 'I could not make out the screen just now, user.'
     }
   })
   ipcMain.handle('web-search', (_event, query: string) => startBackgroundSearch(query))
@@ -532,7 +548,7 @@ app.whenReady().then(async () => {
   tray = new Tray(trayImage)
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Open Friday',
+      label: 'Open YUV',
       click: () => showOrCreateWindow()
     },
     { type: 'separator' },
@@ -544,7 +560,7 @@ app.whenReady().then(async () => {
       }
     }
   ])
-  tray.setToolTip('Friday')
+  tray.setToolTip('YUV')
   tray.setContextMenu(contextMenu)
   tray.on('click', () => showOrCreateWindow())
 

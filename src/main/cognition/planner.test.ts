@@ -6,7 +6,7 @@ import { describe, it } from 'node:test'
 import { GoalPlanner } from './planner.ts'
 
 async function createPlanner(now = new Date('2026-08-27T00:00:00.000Z')) {
-  const directory = await mkdtemp(join(tmpdir(), 'friday-planner-'))
+  const directory = await mkdtemp(join(tmpdir(), 'yuv-planner-'))
   const filePath = join(directory, 'planning.json')
   const planner = new GoalPlanner({ filePath, now: () => now })
   await planner.initialize()
@@ -42,7 +42,10 @@ describe('GoalPlanner', () => {
 
   it('rejects invalid or forward dependencies', async () => {
     const { planner } = await createPlanner()
-    const goal = await planner.createGoal({ title: 'Goal', desiredOutcome: 'Done' })
+    const goal = await planner.createGoal({
+      title: 'Goal',
+      desiredOutcome: 'Done'
+    })
 
     await assert.rejects(
       planner.setPlan({
@@ -66,7 +69,11 @@ describe('GoalPlanner', () => {
       goalId: goal.id,
       steps: [
         { title: 'Collect data', expectedOutcome: 'Data collected' },
-        { title: 'Draft report', expectedOutcome: 'Draft ready', dependsOn: [0] }
+        {
+          title: 'Draft report',
+          expectedOutcome: 'Draft ready',
+          dependsOn: [0]
+        }
       ]
     })
 
@@ -78,7 +85,10 @@ describe('GoalPlanner', () => {
 
   it('will not start risky actions without explicit approval', async () => {
     const { planner } = await createPlanner()
-    const goal = await planner.createGoal({ title: 'Send update', desiredOutcome: 'Update sent' })
+    const goal = await planner.createGoal({
+      title: 'Send update',
+      desiredOutcome: 'Update sent'
+    })
     const planned = await planner.setPlan({
       goalId: goal.id,
       steps: [
@@ -124,7 +134,10 @@ describe('GoalPlanner', () => {
 
   it('blocks a goal when an action fails', async () => {
     const { planner } = await createPlanner()
-    const goal = await planner.createGoal({ title: 'Deploy', desiredOutcome: 'App is live' })
+    const goal = await planner.createGoal({
+      title: 'Deploy',
+      desiredOutcome: 'App is live'
+    })
     const planned = await planner.setPlan({
       goalId: goal.id,
       steps: [{ title: 'Deploy app', expectedOutcome: 'Deployment succeeds' }]

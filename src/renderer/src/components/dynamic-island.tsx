@@ -3,50 +3,42 @@ import { Mic, MicOff, Settings } from 'lucide-react'
 import { AgentAudioVisualizerAura } from '@/components/agents-ui/agent-audio-visualizer-aura'
 import { SearchSourcesPanel } from '@/components/search-sources-panel'
 import { ComputerUseCard } from '@/components/computer-use-card'
-import { StockGraphCard } from '@/components/stock-graph-card'
 import { SettingsPanel } from '@/components/settings-panel'
-import {
-  FridaySessionProvider,
-  useFridaySessionContext
-} from '@/realtime/useFridaySession'
-import captureSfx from '@/assets/sfx/dynamic-island-screen-capture-sound-2.mp3'
+import { YUVSessionProvider, useYUVSessionContext } from '@/realtime/useYUVSession'
 
-type PanelId = 'stock' | 'control' | 'settings'
+type PanelId = 'control' | 'settings'
 
-const ISLAND_PANELS: Record<
-  PanelId,
-  { component: ComponentType; autoCloseMs?: number }
-> = {
-  stock: { component: StockGraphCard, autoCloseMs: 10000 },
+const ISLAND_PANELS: Record<PanelId, { component: ComponentType; autoCloseMs?: number }> = {
   control: { component: ComputerUseCard },
   settings: { component: SettingsPanel }
 }
 
 export function DynamicIslandApp() {
   return (
-    <FridaySessionProvider>
+    <YUVSessionProvider>
       <DynamicIsland />
       <SearchSourcesPanel />
-    </FridaySessionProvider>
+    </YUVSessionProvider>
   )
 }
 
 function DynamicIsland() {
-  const { agentState, remoteTrack, micMode, setMicMode, micLive } = useFridaySessionContext()
+  const { agentState, remoteTrack, micMode, setMicMode, micLive } = useYUVSessionContext()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
-  const [panelContent, setPanelContent] = useState<PanelId>('stock')
+  const [panelContent, setPanelContent] = useState<PanelId>('settings')
   const [flashId, setFlashId] = useState(0)
   const [isControlling, setIsControlling] = useState(false)
 
   useEffect(() => {
-    window.electron.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true })
+    window.electron.ipcRenderer.send('set-ignore-mouse-events', true, {
+      forward: true
+    })
   }, [])
 
   useEffect(() => {
     const onFlash = () => {
       setFlashId((n) => n + 1)
-      void new Audio(captureSfx).play().catch(() => {})
     }
     const onControl = (_e: unknown, payload: { active: boolean }) => {
       setIsControlling(payload.active)
@@ -58,7 +50,7 @@ function DynamicIsland() {
       }
     }
     const onPanel = (_e: unknown, isOpen: boolean) => {
-      setPanelContent('stock')
+      setPanelContent('settings')
       setIsPanelOpen(isOpen)
     }
     window.electron.ipcRenderer.on('screen-capture-flash', onFlash)
@@ -93,7 +85,9 @@ function DynamicIsland() {
         onMouseLeave={() => {
           if (!isPanelOpen) {
             setIsExpanded(false)
-            window.electron.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true })
+            window.electron.ipcRenderer.send('set-ignore-mouse-events', true, {
+              forward: true
+            })
           }
         }}
       >
@@ -114,7 +108,11 @@ function DynamicIsland() {
                   onClick={() => setMicMode(micMode === 'always' ? 'ptt' : 'always')}
                   title={micMode === 'always' ? 'Always listening' : 'Push to talk (Ctrl+Alt)'}
                 >
-                  {micLive ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4 text-zinc-400" />}
+                  {micLive ? (
+                    <Mic className="h-4 w-4" />
+                  ) : (
+                    <MicOff className="h-4 w-4 text-zinc-400" />
+                  )}
                 </button>
                 <button
                   type="button"

@@ -45,23 +45,28 @@ export class CognitiveSystem {
     this.store = new CognitionStore(options)
     this.planner = new GoalPlanner({
       filePath: options.planningFilePath ?? `${options.filePath}.planning`,
-      now: options.now
+      now: options.now,
+      codec: options.codec
     })
     this.knowledge = new KnowledgeGraph({
       filePath: options.knowledgeFilePath ?? `${options.filePath}.knowledge`,
-      now: options.now
+      now: options.now,
+      codec: options.codec
     })
     this.world = new WorldModel({
       filePath: options.worldFilePath ?? `${options.filePath}.world`,
-      now: options.now
+      now: options.now,
+      codec: options.codec
     })
     this.skills = new SkillLibrary({
       filePath: options.skillsFilePath ?? `${options.filePath}.skills`,
-      now: options.now
+      now: options.now,
+      codec: options.codec
     })
     this.self = new SelfModel({
       filePath: options.selfFilePath ?? `${options.filePath}.self`,
-      now: options.now
+      now: options.now,
+      codec: options.codec
     })
     this.supervisor = new ExecutionSupervisor()
     this.runtime = new CognitiveRuntime({

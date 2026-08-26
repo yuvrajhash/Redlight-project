@@ -11,7 +11,7 @@ describe('CognitionStore', () => {
   let now = new Date('2026-08-27T00:00:00.000Z')
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'friday-cognition-test-'))
+    directory = await mkdtemp(join(tmpdir(), 'yuv-cognition-test-'))
     filePath = join(directory, 'memory.json')
     now = new Date('2026-08-27T00:00:00.000Z')
   })

@@ -53,11 +53,18 @@ export type ProviderConfig = {
   tts: string
 }
 
-export type FridayUser = {
-  id: string
-  email: string
-  name: string
-  picture?: string
+export type PrivacySettings = {
+  storeConversationMemory: boolean
+  storeScreenMemory: boolean
+}
+
+export type DisplayChoice = {
+  id: number
+  label: string
+  width: number
+  height: number
+  primary: boolean
+  selected: boolean
 }
 
 export type ComputerAction = {
@@ -81,7 +88,7 @@ export type AgentConfig = {
   voice: string
 }
 
-export type FridayAPI = {
+export type YUVAPI = {
   ping: () => void
   log: (scope: string, message: string) => void
   completeOnboarding: () => Promise<void>
@@ -89,7 +96,7 @@ export type FridayAPI = {
     mintEphemeralKey: () => Promise<{ value: string; model: string }>
   }
   cognition: {
-    remember: (input: MemoryRecordInput) => Promise<MemorySummary>
+    remember: (input: MemoryRecordInput) => Promise<MemorySummary | null>
     observe: (input: ObservationInput) => Promise<MemorySummary | null>
     recall: (query: MemoryQuery) => Promise<MemorySummary[]>
     context: (query: MemoryQuery) => Promise<CognitiveContext>
@@ -121,7 +128,7 @@ export type FridayAPI = {
     stats: () => Promise<PlanningStats>
   }
   runtime: {
-    ingest: (input: PerceptionEventInput) => Promise<PerceptionEvent>
+    ingest: (input: PerceptionEventInput) => Promise<PerceptionEvent | null>
     cycle: () => Promise<CognitiveCycleResult>
     sleep: () => Promise<SleepReport>
     stats: () => Promise<RuntimeStats>
@@ -145,6 +152,10 @@ export type FridayAPI = {
   webSearch: (query: string) => Promise<{ started: boolean; busy?: boolean }>
   computerAction: (action: ComputerAction) => Promise<{ ok: boolean; error?: string }>
   controlComputer: (task: string, approved?: boolean) => Promise<string>
+  displays: {
+    list: () => Promise<DisplayChoice[]>
+    select: (displayId: number | null) => Promise<void>
+  }
   store: {
     initialOnboardingComplete: boolean
     isOnboardingComplete: () => Promise<boolean>
@@ -155,6 +166,8 @@ export type FridayAPI = {
     validateOpenAiKey: (key: string) => Promise<boolean>
     getProviderConfig: () => Promise<ProviderConfig>
     setProviderConfig: (config: ProviderConfig) => Promise<void>
+    getPrivacySettings: () => Promise<PrivacySettings>
+    setPrivacySettings: (settings: PrivacySettings) => Promise<void>
     resetStore: () => Promise<void>
   }
   permissions: {
@@ -168,17 +181,12 @@ export type FridayAPI = {
     triggerInputMonitoringPrompt: () => Promise<void>
     openInputMonitoringSettings: () => Promise<void>
   }
-  auth: {
-    signInWithGoogle: () => Promise<FridayUser>
-    getUser: () => Promise<FridayUser | null>
-    signOut: () => Promise<void>
-  }
 }
 
 declare global {
   interface Window {
     electron: ElectronAPI
-    api: FridayAPI
+    api: YUVAPI
   }
 }
 
