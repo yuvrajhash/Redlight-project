@@ -4,6 +4,22 @@ import type { ControlBrain, VisionMode } from '../../../preload/types'
 
 type InjectFn = (event: Record<string, unknown>) => void
 
+const entitySchema = z.object({
+  name: z.string().describe('Canonical entity name.'),
+  kind: z.enum([
+    'person',
+    'organization',
+    'product',
+    'place',
+    'project',
+    'concept',
+    'event',
+    'other'
+  ]),
+  aliases: z.array(z.string()).optional(),
+  attributes: z.record(z.string()).optional()
+})
+
 export function createFridayTools({
   visionMode,
   controlBrain,
@@ -159,6 +175,106 @@ export function createFridayTools({
     }
   })
 
+  const learnRelationship = tool({
+    name: 'learn_relationship',
+    description:
+      'Extracts one stable subject-predicate-object relationship from an explicit user statement or verified tool result. Use for durable entity knowledge, corrections, and time-bounded facts. Do not infer unstated relationships or store secrets.',
+    parameters: z.object({
+      statement: z.string().describe('The exact source statement supporting this relationship.'),
+      subject: entitySchema,
+      predicate: z.string().describe('A short relationship such as "works at" or "site price".'),
+      object: entitySchema,
+      source: z
+        .enum(['user', 'tool'])
+        .describe('user for an explicit user statement; tool only for a verified tool result.'),
+      confidence: z.number().min(0).max(1),
+      validFrom: z
+        .string()
+        .optional()
+        .describe('Optional ISO timestamp when the fact became valid.'),
+      validTo: z
+        .string()
+        .optional()
+        .describe('Optional ISO timestamp when the fact stopped being valid.')
+    }),
+    execute: async ({
+      statement,
+      subject,
+      predicate,
+      object,
+      source,
+      confidence,
+      validFrom,
+      validTo
+    }) => {
+      const fact = await window.api.knowledge.learn({
+        subject,
+        predicate,
+        object,
+        source,
+        confidence,
+        validFrom,
+        validTo,
+        evidence: [
+          {
+            source,
+            observedAt: new Date().toISOString(),
+            excerpt: statement.slice(0, 240)
+          }
+        ]
+      })
+      return JSON.stringify({
+        beliefId: fact.beliefId,
+        relationship: `${fact.subject.name} ${fact.predicate} ${fact.object.name}`,
+        status: fact.status,
+        confidence: fact.confidence
+      })
+    }
+  })
+
+  const queryKnowledge = tool({
+    name: 'query_knowledge',
+    description:
+      'Traverses Friday connected entity and belief graph using local semantic-vector recall. Use when the user asks how people, products, projects, places, or concepts are related. Contested facts must be described as uncertain.',
+    parameters: z.object({
+      query: z.string(),
+      atTime: z.string().optional().describe('Optional ISO timestamp for a historical question.'),
+      includeContested: z.boolean()
+    }),
+    execute: async ({ query, atTime, includeContested }) => {
+      const result = await window.api.knowledge.query({
+        query,
+        atTime,
+        includeContested,
+        limit: 12
+      })
+      return JSON.stringify({
+        entities: result.entities.map((entity) => ({
+          id: entity.id,
+          name: entity.name,
+          kind: entity.kind
+        })),
+        facts: result.facts.map((fact) => ({
+          subject: fact.subject.name,
+          predicate: fact.predicate,
+          object: fact.object.name,
+          status: fact.status,
+          confidence: fact.confidence,
+          validFrom: fact.validFrom,
+          validTo: fact.validTo
+        }))
+      })
+    }
+  })
+
+  const inspectEntity = tool({
+    name: 'inspect_entity',
+    description:
+      'Returns every stored relationship for a specific entity ID obtained from query_knowledge.',
+    parameters: z.object({ entityId: z.string() }),
+    execute: async ({ entityId }) => window.api.knowledge.inspectEntity(entityId)
+  })
+
   const createGoal = tool({
     name: 'create_goal',
     description:
@@ -299,6 +415,9 @@ export function createFridayTools({
     recallMemory,
     rememberThis,
     auditMemory,
+    learnRelationship,
+    queryKnowledge,
+    inspectEntity,
     createGoal,
     planGoal,
     reviewGoals,

@@ -56,6 +56,7 @@ import { describeScreen, getAgentConfig, runComputerUseLoop, startBackgroundSear
 import { CognitiveSystem } from './cognition/system'
 import type { MemoryQuery, MemoryRecordInput, ObservationInput } from '../shared/cognition'
 import type { GoalInput, GoalPlanInput, GoalQuery, GoalStatus } from '../shared/planning'
+import type { BeliefInput, KnowledgeQuery } from '../shared/knowledge'
 
 dotenvConfig({
   path: app.isPackaged
@@ -219,7 +220,8 @@ app.whenReady().then(async () => {
 
   cognition = new CognitiveSystem({
     filePath: join(app.getPath('userData'), 'cognition-v1.json'),
-    planningFilePath: join(app.getPath('userData'), 'planning-v1.json')
+    planningFilePath: join(app.getPath('userData'), 'planning-v1.json'),
+    knowledgeFilePath: join(app.getPath('userData'), 'knowledge-v1.json')
   })
   try {
     await cognition.initialize()
@@ -255,7 +257,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('cognition:audit', (_event, claim: string) => cognition?.auditClaim(claim))
   ipcMain.handle('cognition:stats', () => cognition?.store.stats())
   ipcMain.handle('cognition:consolidate', () => cognition?.store.consolidate())
-  ipcMain.handle('cognition:clear', () => cognition?.store.clear())
+  ipcMain.handle('cognition:clear', () => cognition?.clearAll())
+  ipcMain.handle('knowledge:learn', (_event, input: BeliefInput) => cognition?.learnBelief(input))
+  ipcMain.handle('knowledge:query', (_event, query: KnowledgeQuery) =>
+    cognition?.queryKnowledge(query)
+  )
+  ipcMain.handle('knowledge:inspectEntity', (_event, entityId: string) =>
+    cognition?.inspectEntity(entityId)
+  )
+  ipcMain.handle('knowledge:stats', () => cognition?.knowledge.stats())
   ipcMain.handle('planning:createGoal', (_event, input: GoalInput) => cognition?.createGoal(input))
   ipcMain.handle('planning:setPlan', (_event, input: GoalPlanInput) => cognition?.planGoal(input))
   ipcMain.handle('planning:listGoals', (_event, query?: GoalQuery) => cognition?.listGoals(query))

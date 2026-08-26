@@ -24,6 +24,13 @@ it('links goal outcomes to durable reflection memory and session context', async
   })
   await system.beginStep(goal.id, planned.steps[0]!.id)
   await system.resolveStep(goal.id, planned.steps[0]!.id, 'All cognitive tests passed', true)
+  await system.learnBelief({
+    subject: { name: 'Friday', kind: 'project' },
+    predicate: 'uses',
+    object: { name: 'cognitive tests', kind: 'concept' },
+    source: 'reflection',
+    confidence: 0.9
+  })
 
   const reflections = await system.recall({
     query: 'cognitive tests outcome',
@@ -37,5 +44,11 @@ it('links goal outcomes to durable reflection memory and session context', async
   assert.equal(reflections.length, 1)
   assert.match(reflections[0]!.content, /Expected:/)
   assert.match(context.text, /goal-reflection|Goal: Test cognition/)
+  assert.match(context.text, /Friday uses cognitive tests/)
   assert.equal(system.planner.stats().completedGoals, 1)
+
+  await system.clearAll()
+  assert.equal(system.store.stats().totalMemories, 0)
+  assert.equal(system.planner.stats().totalGoals, 0)
+  assert.equal(system.knowledge.stats().beliefs, 0)
 })

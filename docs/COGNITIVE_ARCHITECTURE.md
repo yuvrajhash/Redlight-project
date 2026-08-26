@@ -26,10 +26,20 @@ kernel instead of presenting an LLM as consciousness.
   states. High and critical risk steps require approval regardless of the model's suggestion.
 - **Outcome reflection (v2)**: completing or failing a step compares the predicted result with the
   observed result and writes a linked reflection memory.
+- **Entity graph (v3)**: people, organizations, products, places, projects, events, and concepts are
+  represented as durable entities connected by evidence-bearing relationships.
+- **Semantic association (v3)**: a dependency-free local feature-hashing vector links related wording
+  and graph neighborhoods without sending private knowledge to an embedding service.
+- **Temporal belief revision (v3)**: relationships carry validity windows. Stronger conflicting
+  evidence supersedes weaker beliefs, similarly credible conflicts remain contested, and
+  non-overlapping historical facts coexist.
+- **Structural secret rejection (v3)**: common credential, private-key, OTP, and payment-card patterns
+  are rejected before an entity or relationship can enter the knowledge graph.
 
 Memory is stored in `cognition-v1.json` under Electron's per-user application-data directory. The
-goal graph is stored separately in `planning-v1.json`. Both files are written atomically. API keys
-and secrets must never be stored as cognitive memories.
+goal graph is stored separately in `planning-v1.json`, and connected knowledge in
+`knowledge-v1.json`. All files are written atomically. API keys and secrets must never be stored as
+cognitive memories or graph entities.
 
 ## Runtime flow
 
@@ -45,6 +55,9 @@ and secrets must never be stored as cognitive memories.
    work and records the real outcome after each attempted step.
 8. A risky step cannot start until it enters `waiting_approval` and consumes a fresh user approval
    received after the approval request.
+9. Stable user statements and verified results can be extracted into subject-predicate-object
+   relationships. Duplicate evidence reinforces a connection; contradiction triggers belief revision.
+10. Session context includes relevant graph relationships, clearly labeling contested knowledge.
 
 ## Safety boundaries
 
@@ -58,17 +71,19 @@ and secrets must never be stored as cognitive memories.
   system permissions, and per-action approval gates always take precedence.
 - Voice approval is short-lived, single-use, and valid only when captured after the matching step
   requested approval.
+- Semantic similarity is a retrieval signal, not evidence. Graph confidence and status remain
+  evidence-driven, and externally changing facts still require live verification.
+- “Forget All” clears memories, goals, plans, entities, and relationships together.
 - The renderer can save or delete an API key but can no longer request the decrypted key.
 
 ## Next cognitive milestones
 
-1. Model-assisted entity extraction and semantic embeddings.
-2. Belief revision using evidence provenance and temporal validity.
-3. Scheduled reflection jobs across related goals and outcomes.
-4. Learned procedures with success/failure statistics and safe rehearsal.
-5. User-visible goal graph and memory browser with granular editing and deletion.
-6. Encrypted cognitive storage and configurable privacy modes.
-7. Cross-device sync through an authenticated, end-to-end-encrypted backend.
+1. Scheduled reflection jobs across related goals and outcomes.
+2. Learned procedures with success/failure statistics and safe rehearsal.
+3. User-visible goal, knowledge, and memory browser with granular editing and deletion.
+4. Optional provider embeddings for deeper semantic recall, with explicit privacy controls.
+5. Encrypted cognitive storage and configurable privacy modes.
+6. Cross-device sync through an authenticated, end-to-end-encrypted backend.
 
 This architecture does not claim consciousness, feelings, or biological equivalence. It provides
 the testable mechanics required for persistent perception, memory, recall, audit, and learning.
