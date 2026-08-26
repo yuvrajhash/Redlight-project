@@ -9,6 +9,17 @@ import type {
   MemorySummary,
   ObservationInput
 } from '../shared/cognition'
+import type {
+  Goal,
+  GoalInput,
+  GoalPlanInput,
+  GoalQuery,
+  GoalStatus,
+  NextAction,
+  PlanStep,
+  PlanningStats,
+  StepResolution
+} from '../shared/planning'
 
 export type KnownService = 'livekit' | 'openai' | 'google' | 'sarvam'
 
@@ -62,6 +73,22 @@ export type FridayAPI = {
     stats: () => Promise<CognitionStats>
     consolidate: () => Promise<ConsolidationResult>
     clear: () => Promise<void>
+  }
+  planning: {
+    createGoal: (input: GoalInput) => Promise<Goal>
+    setPlan: (input: GoalPlanInput) => Promise<Goal>
+    listGoals: (query?: GoalQuery) => Promise<Goal[]>
+    nextActions: (limit?: number) => Promise<NextAction[]>
+    approveStep: (goalId: string, stepId: string, userConfirmed: boolean) => Promise<PlanStep>
+    beginStep: (goalId: string, stepId: string) => Promise<PlanStep>
+    resolveStep: (
+      goalId: string,
+      stepId: string,
+      outcome: string,
+      succeeded: boolean
+    ) => Promise<StepResolution>
+    setGoalStatus: (goalId: string, status: GoalStatus) => Promise<Goal>
+    stats: () => Promise<PlanningStats>
   }
   getAgentConfig: () => Promise<AgentConfig>
   captureScreen: () => Promise<{ image: string }>
