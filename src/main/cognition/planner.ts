@@ -269,6 +269,11 @@ export class GoalPlanner {
     }
   }
 
+  async clear(): Promise<void> {
+    this.goals = []
+    await this.persist()
+  }
+
   private requireGoal(goalId: string): Goal {
     const goal = this.goals.find((candidate) => candidate.id === goalId)
     if (!goal) throw new Error('Goal not found.')
