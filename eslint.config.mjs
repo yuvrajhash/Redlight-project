@@ -15,8 +15,12 @@ export default tseslint.config(
   {
     files: ['**/*.{ts,tsx}'],
     rules: {
-      // Native module shims and OpenAI SDK response adapters require runtime-shaped values.
-      '@typescript-eslint/no-explicit-any': 'off'
+      // The recovered application relies on inferred return types, native module shims,
+      // and a triple-slash bridge for its renderer environment declaration.
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      '@typescript-eslint/triple-slash-reference': 'off'
     }
   }
 )
