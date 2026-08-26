@@ -1,0 +1,15 @@
+node_modules
+dist
+out
+.DS_Store
+*.local
+.env
+.env.local
+.eslintcache
+.claude
+.cursor
+temp.md
+*.log
+*.tsbuildinfo
+agent/.env.local
+worker/.dev.vars

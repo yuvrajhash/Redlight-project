@@ -1,0 +1,28 @@
+diff --git a/out/node-module-collector/pnpmNodeModulesCollector.js b/out/node-module-collector/pnpmNodeModulesCollector.js
+index 602599280ab621d078748187bb6b4ae9431c1739..4bc4218050e8f6e1dd173b667dba611e52426dab 100644
+--- a/out/node-module-collector/pnpmNodeModulesCollector.js
++++ b/out/node-module-collector/pnpmNodeModulesCollector.js
+@@ -25,6 +25,23 @@ class PnpmNodeModulesCollector extends nodeModulesCollector_1.NodeModulesCollect
+         const all = packageJson ? { ...packageJson.dependencies, ...packageJson.optionalDependencies } : { ...tree.dependencies, ...tree.optionalDependencies };
+         const optional = packageJson ? { ...packageJson.optionalDependencies } : {};
+         const deps = { ...(tree.dependencies || {}), ...(tree.optionalDependencies || {}) };
++        // PATCH: `pnpm list --depth Infinity` deduplicates — a package fully expanded
++        // in one branch is emitted with an EMPTY `dependencies` everywhere else. If the
++        // collector caches that empty occurrence first, all of the package's transitive
++        // deps are dropped from the production graph (e.g. jimp -> @jimp/* vanish, which
++        // crashes nut.js at load with "Cannot find module '@jimp/custom'"). Reconstruct
++        // any missing edges from the package's own package.json (`all`) so the graph no
++        // longer depends on which occurrence pnpm chose to fully expand.
++        const parentDir = tree.path || this.rootDir;
++        for (const depName of Object.keys(all)) {
++            if (deps[depName]) {
++                continue;
++            }
++            const resolved = await this.cache.locatePackageVersion({ pkgName: depName, parentDir, requiredRange: all[depName] });
++            if (resolved && resolved.packageJson) {
++                deps[depName] = { version: resolved.packageJson.version, path: resolved.packageDir };
++            }
++        }
+         this.productionGraph[dependencyId] = { dependencies: [] };
+         const depPromises = Object.entries(deps).map(async ([packageName, dependency]) => {
+             // First check if it's in production dependencies

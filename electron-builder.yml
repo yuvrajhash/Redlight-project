@@ -1,0 +1,38 @@
+appId: com.feynmanpi.friday
+productName: Friday
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.*'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!recovered-out'
+  - '!agent'
+  - '!worker'
+asarUnpack:
+  - resources/**
+  - node_modules/@nut-tree-fork/**
+  - node_modules/@jimp/**
+  - node_modules/uiohook-napi/**
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Friday needs microphone access for voice conversation.
+    NSScreenCaptureDescription: Friday needs screen recording to see your display.
+  target:
+    - dmg
+linux:
+  target:
+    - AppImage
+npmRebuild: false
+publish:
+  provider: generic
+  url: https://example.com/auto-updates

@@ -1,0 +1,22 @@
+# Flat, npm-like node_modules. electron-builder's dependency collector doesn't
+# follow pnpm's nested symlinks, so transitive deps (e.g. `ms` via `debug` via
+# electron-updater) get dropped from app.asar → "Cannot find module" crashes in
+# packaged builds. A hoisted linker lays the whole prod tree flat at the top
+# level, which electron-builder packages correctly.
+#
+# NOTE: pnpm 11 reads these settings HERE, not in .npmrc / the package.json
+# "pnpm" field.
+packages:
+  - '.'
+
+nodeLinker: hoisted
+
+allowBuilds:
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  msw: true
+  uiohook-napi: true
+
+patchedDependencies:
+  app-builder-lib@26.8.1: patches/app-builder-lib@26.8.1.patch
