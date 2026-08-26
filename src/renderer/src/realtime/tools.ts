@@ -7,13 +7,16 @@ type InjectFn = (event: Record<string, unknown>) => void
 export function createFridayTools({
   visionMode,
   controlBrain,
-  inject
+  inject,
+  consumeFreshApproval
 }: {
   visionMode: VisionMode
   controlBrain: ControlBrain
   inject: InjectFn
+  consumeFreshApproval: (requestedAt: number) => boolean
 }) {
   const effectiveVisionMode = controlBrain === 'realtime' ? 'direct' : visionMode
+  let pendingApproval: { goalId: string; stepId: string; requestedAt: number } | null = null
 
   const lookAtScreen = tool({
     name: 'look_at_screen',
@@ -156,12 +159,152 @@ export function createFridayTools({
     }
   })
 
+  const createGoal = tool({
+    name: 'create_goal',
+    description:
+      'Creates a durable goal when the user explicitly asks Friday to pursue, track, or accomplish an outcome. A goal is not permission to execute consequential actions.',
+    parameters: z.object({
+      title: z.string().describe('Short goal title.'),
+      desiredOutcome: z.string().describe('Concrete definition of success.'),
+      priority: z.enum(['low', 'normal', 'high', 'critical']),
+      constraints: z.array(z.string()).optional()
+    }),
+    execute: async ({ title, desiredOutcome, priority, constraints }) => {
+      const goal = await window.api.planning.createGoal({
+        title,
+        desiredOutcome,
+        priority,
+        constraints,
+        source: 'user'
+      })
+      return JSON.stringify({ id: goal.id, title: goal.title, status: goal.status })
+    }
+  })
+
+  const planGoal = tool({
+    name: 'plan_goal',
+    description:
+      'Decomposes an existing goal into ordered, inspectable steps. Dependencies use zero-based indexes and may refer only to earlier steps. Mark external communication, deletion, purchases, credential changes, or irreversible actions high risk.',
+    parameters: z.object({
+      goalId: z.string(),
+      steps: z
+        .array(
+          z.object({
+            title: z.string(),
+            expectedOutcome: z.string(),
+            risk: z.enum(['low', 'medium', 'high', 'critical']),
+            requiresApproval: z.boolean(),
+            dependsOn: z.array(z.number().int().nonnegative()).optional()
+          })
+        )
+        .min(1)
+        .max(30)
+    }),
+    execute: async ({ goalId, steps }) => {
+      const goal = await window.api.planning.setPlan({ goalId, steps })
+      return JSON.stringify({
+        goalId: goal.id,
+        status: goal.status,
+        steps: goal.steps.map((step) => ({
+          id: step.id,
+          title: step.title,
+          status: step.status,
+          requiresApproval: step.requiresApproval,
+          dependsOn: step.dependsOn
+        }))
+      })
+    }
+  })
+
+  const reviewGoals = tool({
+    name: 'review_goals',
+    description:
+      'Reviews active and blocked goals and identifies safe next actions. Use before claiming that Friday is continuing or resuming prior work.',
+    parameters: z.object({}),
+    execute: async () => {
+      const [goals, actions] = await Promise.all([
+        window.api.planning.listGoals({ statuses: ['active', 'blocked'], limit: 10 }),
+        window.api.planning.nextActions(10)
+      ])
+      return JSON.stringify({ goals, nextActions: actions })
+    }
+  })
+
+  const beginGoalStep = tool({
+    name: 'begin_goal_step',
+    description:
+      'Marks a dependency-ready plan step in progress. If it returns waiting_approval, explain the exact action and ask the user for confirmation; do not execute it.',
+    parameters: z.object({ goalId: z.string(), stepId: z.string() }),
+    execute: async ({ goalId, stepId }) => {
+      const step = await window.api.planning.beginStep(goalId, stepId)
+      if (step.status === 'waiting_approval') {
+        pendingApproval = { goalId, stepId, requestedAt: Date.now() }
+      }
+      return JSON.stringify({
+        id: step.id,
+        title: step.title,
+        status: step.status,
+        risk: step.risk,
+        instruction:
+          step.status === 'waiting_approval'
+            ? 'Stop. Describe this exact action and request explicit user approval.'
+            : 'The step may now be attempted using the appropriate capability.'
+      })
+    }
+  })
+
+  const approveGoalStep = tool({
+    name: 'approve_goal_step',
+    description:
+      'Consumes a fresh explicit user confirmation for the exact plan step that is waiting. Call only immediately after the user says yes, approve, proceed, go ahead, or do it in response to the approval question.',
+    parameters: z.object({ goalId: z.string(), stepId: z.string() }),
+    execute: async ({ goalId, stepId }) => {
+      if (
+        !pendingApproval ||
+        pendingApproval.goalId !== goalId ||
+        pendingApproval.stepId !== stepId ||
+        !consumeFreshApproval(pendingApproval.requestedAt)
+      ) {
+        return 'Approval denied: no fresh explicit user confirmation matched this pending step.'
+      }
+      const step = await window.api.planning.approveStep(goalId, stepId, true)
+      pendingApproval = null
+      return JSON.stringify({ id: step.id, status: step.status, approvedAt: step.approvedAt })
+    }
+  })
+
+  const resolveGoalStep = tool({
+    name: 'resolve_goal_step',
+    description:
+      'Records the observed result of an in-progress goal step. Never report success unless the tool or screen actually confirmed the outcome.',
+    parameters: z.object({
+      goalId: z.string(),
+      stepId: z.string(),
+      outcome: z.string(),
+      succeeded: z.boolean()
+    }),
+    execute: async ({ goalId, stepId, outcome, succeeded }) => {
+      const result = await window.api.planning.resolveStep(goalId, stepId, outcome, succeeded)
+      return JSON.stringify({
+        goalStatus: result.goal.status,
+        stepStatus: result.step.status,
+        reflection: result.reflection
+      })
+    }
+  })
+
   return [
     lookAtScreen,
     searchWeb,
     recallMemory,
     rememberThis,
     auditMemory,
+    createGoal,
+    planGoal,
+    reviewGoals,
+    beginGoalStep,
+    approveGoalStep,
+    resolveGoalStep,
     ...createControlTools(controlBrain)
   ]
 }
