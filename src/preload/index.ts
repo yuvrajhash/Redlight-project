@@ -3,9 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { FridayAPI } from './types'
 
 const onboardingArg = process.argv.find((arg) => arg.startsWith('--onboarding-complete='))
-const initialOnboardingComplete = onboardingArg
-  ? onboardingArg.split('=')[1] === 'true'
-  : false
+const initialOnboardingComplete = onboardingArg ? onboardingArg.split('=')[1] === 'true' : false
 
 const api: FridayAPI = {
   ping: () => ipcRenderer.send('ping'),
@@ -13,6 +11,16 @@ const api: FridayAPI = {
   completeOnboarding: () => ipcRenderer.invoke('complete-onboarding'),
   realtime: {
     mintEphemeralKey: () => ipcRenderer.invoke('realtime:mintEphemeralKey')
+  },
+  cognition: {
+    remember: (input) => ipcRenderer.invoke('cognition:remember', input),
+    observe: (input) => ipcRenderer.invoke('cognition:observe', input),
+    recall: (query) => ipcRenderer.invoke('cognition:recall', query),
+    context: (query) => ipcRenderer.invoke('cognition:context', query),
+    audit: (claim) => ipcRenderer.invoke('cognition:audit', claim),
+    stats: () => ipcRenderer.invoke('cognition:stats'),
+    consolidate: () => ipcRenderer.invoke('cognition:consolidate'),
+    clear: () => ipcRenderer.invoke('cognition:clear')
   },
   getAgentConfig: () => ipcRenderer.invoke('get-agent-config'),
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
@@ -25,7 +33,6 @@ const api: FridayAPI = {
     isOnboardingComplete: () => ipcRenderer.invoke('store:isOnboardingComplete'),
     setOnboardingComplete: (value) => ipcRenderer.invoke('store:setOnboardingComplete', value),
     saveApiKey: (service, key) => ipcRenderer.invoke('store:saveApiKey', service, key),
-    getApiKey: (service) => ipcRenderer.invoke('store:getApiKey', service),
     deleteApiKey: (service) => ipcRenderer.invoke('store:deleteApiKey', service),
     validateGoogleKey: (key) => ipcRenderer.invoke('store:validateGoogleKey', key),
     validateOpenAiKey: (key) => ipcRenderer.invoke('store:validateOpenAiKey', key),
@@ -44,8 +51,7 @@ const api: FridayAPI = {
     openAccessibilitySettings: () => ipcRenderer.invoke('permissions:openAccessibilitySettings'),
     triggerInputMonitoringPrompt: () =>
       ipcRenderer.invoke('permissions:triggerInputMonitoringPrompt'),
-    openInputMonitoringSettings: () =>
-      ipcRenderer.invoke('permissions:openInputMonitoringSettings')
+    openInputMonitoringSettings: () => ipcRenderer.invoke('permissions:openInputMonitoringSettings')
   },
   auth: {
     signInWithGoogle: () => ipcRenderer.invoke('auth:signInWithGoogle'),
