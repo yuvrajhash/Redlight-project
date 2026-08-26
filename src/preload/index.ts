@@ -22,6 +22,12 @@ const api: FridayAPI = {
     consolidate: () => ipcRenderer.invoke('cognition:consolidate'),
     clear: () => ipcRenderer.invoke('cognition:clear')
   },
+  knowledge: {
+    learn: (input) => ipcRenderer.invoke('knowledge:learn', input),
+    query: (query) => ipcRenderer.invoke('knowledge:query', query),
+    inspectEntity: (entityId) => ipcRenderer.invoke('knowledge:inspectEntity', entityId),
+    stats: () => ipcRenderer.invoke('knowledge:stats')
+  },
   planning: {
     createGoal: (input) => ipcRenderer.invoke('planning:createGoal', input),
     setPlan: (input) => ipcRenderer.invoke('planning:setPlan', input),
