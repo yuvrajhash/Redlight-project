@@ -1,5 +1,6 @@
 import { safeStorage } from 'electron'
 import Store from 'electron-store'
+import type { PrivacySettings } from '../shared/control-centre'
 
 export type KnownService = 'livekit' | 'openai' | 'google' | 'sarvam'
 
@@ -9,10 +10,7 @@ export type ProviderConfig = {
   tts: string
 }
 
-export type PrivacySettings = {
-  storeConversationMemory: boolean
-  storeScreenMemory: boolean
-}
+export type { PrivacySettings } from '../shared/control-centre'
 
 type StoreSchema = {
   onboardingComplete: boolean
@@ -35,7 +33,9 @@ const store = new Store<StoreSchema>({
     selectedDisplayId: null,
     privacySettings: {
       storeConversationMemory: false,
-      storeScreenMemory: false
+      storeScreenMemory: false,
+      conversationRetentionDays: 30,
+      screenRetentionDays: 1
     }
   }
 })
@@ -108,11 +108,24 @@ export function setSelectedDisplayId(displayId: number | null): void {
 }
 
 export function getPrivacySettings(): PrivacySettings {
-  return store.get('privacySettings')
+  const saved = store.get('privacySettings')
+  return {
+    storeConversationMemory: saved.storeConversationMemory ?? false,
+    storeScreenMemory: saved.storeScreenMemory ?? false,
+    conversationRetentionDays: saved.conversationRetentionDays ?? 30,
+    screenRetentionDays: saved.screenRetentionDays ?? 1
+  }
 }
 
 export function setPrivacySettings(settings: PrivacySettings): void {
-  store.set('privacySettings', settings)
+  const retention = (value: number, fallback: number) =>
+    Number.isFinite(value) ? Math.max(1, Math.min(3650, Math.round(value))) : fallback
+  store.set('privacySettings', {
+    storeConversationMemory: settings.storeConversationMemory === true,
+    storeScreenMemory: settings.storeScreenMemory === true,
+    conversationRetentionDays: retention(settings.conversationRetentionDays, 30),
+    screenRetentionDays: retention(settings.screenRetentionDays, 1)
+  })
 }
 
 export function resetStore(): void {

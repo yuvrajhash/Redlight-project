@@ -91,3 +91,11 @@ export type PlanningStats = {
   pendingSteps: number
   waitingApprovalSteps: number
 }
+
+export type GoalUpdate = {
+  title?: string
+  desiredOutcome?: string
+  priority?: GoalPriority
+  status?: GoalStatus
+  targetAt?: string | null
+}

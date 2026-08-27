@@ -154,4 +154,19 @@ describe('GoalPlanner', () => {
     assert.match(result.reflection.lesson, /diagnosing/)
     assert.equal(planner.stats().blockedGoals, 1)
   })
+
+  it('allows control-centre editing and granular deletion', async () => {
+    const { planner } = await createPlanner()
+    const goal = await planner.createGoal({ title: 'Old title', desiredOutcome: 'Old outcome' })
+    const updated = await planner.updateGoal(goal.id, {
+      title: 'Release YUV',
+      desiredOutcome: 'A verified build is released',
+      priority: 'critical',
+      status: 'paused'
+    })
+    assert.equal(updated.title, 'Release YUV')
+    assert.equal(updated.status, 'paused')
+    assert.equal(await planner.deleteGoal(goal.id), true)
+    assert.equal(planner.stats().totalGoals, 0)
+  })
 })

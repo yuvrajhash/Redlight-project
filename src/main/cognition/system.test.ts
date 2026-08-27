@@ -31,6 +31,14 @@ it('links goal outcomes to durable reflection memory and session context', async
     source: 'reflection',
     confidence: 0.9
   })
+  await system.actions.record({
+    action: 'Run cognitive tests',
+    source: 'system',
+    risk: 'low',
+    requiredApproval: false,
+    approved: true,
+    status: 'succeeded'
+  })
 
   const reflections = await system.recall({
     query: 'cognitive tests outcome',
@@ -51,4 +59,5 @@ it('links goal outcomes to durable reflection memory and session context', async
   assert.equal(system.store.stats().totalMemories, 0)
   assert.equal(system.planner.stats().totalGoals, 0)
   assert.equal(system.knowledge.stats().beliefs, 0)
+  assert.equal(system.actions.list().length, 0)
 })

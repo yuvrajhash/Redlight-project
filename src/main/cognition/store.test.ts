@@ -143,4 +143,40 @@ describe('CognitionStore', () => {
     assert.equal(result.conflicting.length, 1)
     assert.ok(result.confidence > 0.7)
   })
+
+  it('lists, edits, archives, and deletes individual memories safely', async () => {
+    const store = new CognitionStore({ filePath, now: () => now })
+    const memory = await store.remember({
+      kind: 'semantic',
+      content: 'The preferred theme is dark.',
+      source: 'user',
+      tags: ['preference']
+    })
+    const edited = await store.update(memory.id, {
+      content: 'The preferred theme is deep black.',
+      status: 'archived',
+      tags: ['preference', 'theme']
+    })
+    assert.equal(edited.status, 'archived')
+    assert.equal(store.list({ statuses: ['archived'] })[0]!.content, edited.content)
+    assert.equal(await store.delete(memory.id), true)
+    assert.equal(store.stats().totalMemories, 0)
+  })
+
+  it('rejects secrets from explicit memory and memory edits', async () => {
+    const store = new CognitionStore({ filePath, now: () => now })
+    await assert.rejects(
+      store.remember({ kind: 'semantic', content: 'password: hunter2', source: 'user' }),
+      /cannot be remembered/
+    )
+    const memory = await store.remember({
+      kind: 'semantic',
+      content: 'A safe preference.',
+      source: 'user'
+    })
+    await assert.rejects(
+      store.update(memory.id, { content: 'otp: 123456' }),
+      /cannot be remembered/
+    )
+  })
 })

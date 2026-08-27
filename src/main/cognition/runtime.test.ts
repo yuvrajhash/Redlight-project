@@ -150,6 +150,24 @@ describe('Procedural learning', () => {
     assert.equal(match.executable, false)
     assert.match(match.reason, /approval/)
   })
+
+  it('allows learned procedures to be disabled and deleted', async () => {
+    const library = new SkillLibrary({
+      filePath: await tempFile('managed-skills.json'),
+      now: () => FIXED_NOW
+    })
+    const skill = await library.learn({
+      name: 'Open settings',
+      description: 'Open app settings',
+      demonstration: {
+        source: 'user',
+        steps: [{ instruction: 'Open settings', expectedOutcome: 'Settings visible', risk: 'low' }]
+      }
+    })
+    assert.equal((await library.setStatus(skill.id, 'disabled')).status, 'disabled')
+    assert.equal(await library.delete(skill.id), true)
+    assert.equal(library.stats().total, 0)
+  })
 })
 
 describe('Metacognition and execution safety', () => {

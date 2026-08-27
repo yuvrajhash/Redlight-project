@@ -213,6 +213,50 @@ export class KnowledgeGraph {
     }
   }
 
+  list(limit = 300): KnowledgeQueryResult {
+    const safeLimit = Math.max(1, Math.min(1_000, limit))
+    return {
+      entities: this.entities
+        .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .slice(0, safeLimit)
+        .map((entity) => structuredClone(entity)),
+      facts: this.beliefs
+        .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .slice(0, safeLimit)
+        .map((belief) => this.toFact(belief))
+    }
+  }
+
+  async deleteBelief(beliefId: string): Promise<boolean> {
+    const before = this.beliefs.length
+    this.beliefs = this.beliefs.filter((belief) => belief.id !== beliefId)
+    if (this.beliefs.length === before) return false
+    for (const belief of this.beliefs) {
+      belief.supersedes = belief.supersedes.filter((id) => id !== beliefId)
+    }
+    await this.persist()
+    return true
+  }
+
+  async deleteEntity(entityId: string): Promise<boolean> {
+    const before = this.entities.length
+    this.entities = this.entities.filter((entity) => entity.id !== entityId)
+    if (this.entities.length === before) return false
+    const removedBeliefIds = new Set(
+      this.beliefs
+        .filter((belief) => belief.subjectId === entityId || belief.objectId === entityId)
+        .map((belief) => belief.id)
+    )
+    this.beliefs = this.beliefs.filter(
+      (belief) => belief.subjectId !== entityId && belief.objectId !== entityId
+    )
+    for (const belief of this.beliefs) {
+      belief.supersedes = belief.supersedes.filter((id) => !removedBeliefIds.has(id))
+    }
+    await this.persist()
+    return true
+  }
+
   async clear(): Promise<void> {
     this.entities = []
     this.beliefs = []

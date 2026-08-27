@@ -5,6 +5,10 @@ Choudhary (Yuv). It combines realtime voice, screen understanding, controlled co
 persistent encrypted memory, a semantic knowledge graph, goals, procedural learning, a world model,
 metacognitive audits, consolidation, and an emergency stop.
 
+The Cognitive Control Centre provides a full-size, local interface for inspecting and managing
+memory, goals, knowledge, learned procedures, privacy retention, capabilities, and the computer
+action audit trail. Open it from YUV's settings panel.
+
 ## Development
 
 Requires Node.js 22 and pnpm.

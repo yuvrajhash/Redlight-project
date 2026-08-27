@@ -130,6 +130,26 @@ export class SkillLibrary {
     return structuredClone(this.skills)
   }
 
+  async setStatus(skillId: string, status: SkillRecord['status']): Promise<SkillRecord> {
+    const skill = this.skills.find((candidate) => candidate.id === skillId)
+    if (!skill) throw new Error('Skill not found.')
+    if (!['candidate', 'verified', 'disabled'].includes(status)) {
+      throw new Error('Invalid skill status.')
+    }
+    skill.status = status
+    skill.updatedAt = this.now().toISOString()
+    await this.persist()
+    return structuredClone(skill)
+  }
+
+  async delete(skillId: string): Promise<boolean> {
+    const before = this.skills.length
+    this.skills = this.skills.filter((skill) => skill.id !== skillId)
+    if (this.skills.length === before) return false
+    await this.persist()
+    return true
+  }
+
   stats(): { total: number; verified: number; disabled: number } {
     return {
       total: this.skills.length,
