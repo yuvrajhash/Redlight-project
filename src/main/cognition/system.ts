@@ -22,6 +22,7 @@ import { ExecutionSupervisor } from './safety.ts'
 import { SkillLibrary } from './skills.ts'
 import { CognitionStore, type CognitionStoreOptions } from './store.ts'
 import { WorldModel } from './world-model.ts'
+import { ActionAuditLog } from './action-audit.ts'
 
 export type CognitiveSystemOptions = CognitionStoreOptions & {
   planningFilePath?: string
@@ -29,6 +30,7 @@ export type CognitiveSystemOptions = CognitionStoreOptions & {
   worldFilePath?: string
   skillsFilePath?: string
   selfFilePath?: string
+  actionFilePath?: string
 }
 
 export class CognitiveSystem {
@@ -40,6 +42,7 @@ export class CognitiveSystem {
   readonly self: SelfModel
   readonly supervisor: ExecutionSupervisor
   readonly runtime: CognitiveRuntime
+  readonly actions: ActionAuditLog
 
   constructor(options: CognitiveSystemOptions) {
     this.store = new CognitionStore(options)
@@ -68,6 +71,11 @@ export class CognitiveSystem {
       now: options.now,
       codec: options.codec
     })
+    this.actions = new ActionAuditLog({
+      filePath: options.actionFilePath ?? `${options.filePath}.actions`,
+      now: options.now,
+      codec: options.codec
+    })
     this.supervisor = new ExecutionSupervisor()
     this.runtime = new CognitiveRuntime({
       store: this.store,
@@ -88,7 +96,8 @@ export class CognitiveSystem {
       this.knowledge.initialize(),
       this.world.initialize(),
       this.skills.initialize(),
-      this.self.initialize()
+      this.self.initialize(),
+      this.actions.initialize()
     ])
   }
 
@@ -128,7 +137,8 @@ export class CognitiveSystem {
       this.knowledge.clear(),
       this.world.clear(),
       this.skills.clear(),
-      this.self.clear()
+      this.self.clear(),
+      this.actions.clear()
     ])
   }
 

@@ -35,6 +35,14 @@ kernel instead of presenting an LLM as consciousness.
   non-overlapping historical facts coexist.
 - **Structural secret rejection (v3)**: common credential, private-key, OTP, and payment-card patterns
   are rejected before an entity or relationship can enter the knowledge graph.
+- **Cognitive Control Centre**: a dedicated desktop workspace makes memories, goals, knowledge,
+  learned procedures, runtime state, capabilities, and computer-action history inspectable.
+- **Granular cognitive control**: individual memories, goals, entities, beliefs, skills, and action
+  records can be edited, archived, disabled, or deleted without erasing the full cognitive system.
+- **Action audit trail**: computer actions preserve risk, approval, authorization, outcome, and error
+  state in a separate encrypted history.
+- **Private-memory retention**: conversation and screen storage remain opt-in and have independently
+  configurable expiry periods enforced when those memories are persisted.
 
 Memory is stored under Electron's per-user application-data directory. The goal graph, knowledge,
 world model, skills, and self-model use separate snapshots. Every snapshot is encrypted with the
@@ -80,10 +88,8 @@ crash recovery. Legacy plaintext snapshots migrate in place after a successful s
 
 1. Scheduled reflection jobs across related goals and outcomes.
 2. Learned procedures with success/failure statistics and safe rehearsal.
-3. User-visible goal, knowledge, and memory browser with granular editing and deletion.
-4. Optional provider embeddings for deeper semantic recall, with explicit privacy controls.
-5. Configurable per-modality retention and granular deletion.
-6. Optional cross-device sync through an authenticated, end-to-end-encrypted backend.
+3. Optional provider embeddings for deeper semantic recall, with explicit privacy controls.
+4. Optional cross-device sync through an authenticated, end-to-end-encrypted backend.
 
 This architecture does not claim consciousness, feelings, or biological equivalence. It provides
 the testable mechanics required for persistent perception, memory, recall, audit, and learning.

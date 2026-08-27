@@ -209,3 +209,23 @@ export type ActionAuthorization = {
   requiresApproval: boolean
   reason: string
 }
+
+export type ActionAuditStatus = 'blocked' | 'authorized' | 'succeeded' | 'failed' | 'cancelled'
+
+export type ActionAuditEntry = {
+  id: string
+  action: string
+  source: 'direct-control' | 'computer-use' | 'safety' | 'system'
+  risk: ActionRisk
+  requiredApproval: boolean
+  approved: boolean
+  status: ActionAuditStatus
+  detail?: string
+  error?: string
+  createdAt: string
+  completedAt?: string
+}
+
+export type ActionAuditInput = Omit<ActionAuditEntry, 'id' | 'createdAt'> & {
+  createdAt?: string
+}

@@ -1,9 +1,11 @@
 import { config as dotenvConfig } from 'dotenv'
 import { join } from 'path'
 import { createServer } from 'http'
+import { writeFile } from 'node:fs/promises'
 import {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
@@ -64,9 +66,16 @@ import {
   stopComputerUseLoop
 } from './brains'
 import { CognitiveSystem } from './cognition/system'
+import { applyConfiguredRetention } from './cognition/retention'
 import { createCognitiveStorageCodec } from './secure-storage'
 import type { MemoryQuery, MemoryRecordInput, ObservationInput } from '../shared/cognition'
-import type { GoalInput, GoalPlanInput, GoalQuery, GoalStatus } from '../shared/planning'
+import type {
+  GoalInput,
+  GoalPlanInput,
+  GoalQuery,
+  GoalStatus,
+  GoalUpdate
+} from '../shared/planning'
 import type { BeliefInput, KnowledgeQuery } from '../shared/knowledge'
 import type {
   CapabilityInput,
@@ -76,6 +85,8 @@ import type {
   SkillOutcome,
   WorldEntityInput
 } from '../shared/runtime'
+import type { MemoryListQuery, MemoryUpdate } from '../shared/cognition'
+import type { CognitiveControlSnapshot } from '../shared/control-centre'
 
 dotenvConfig({
   path: app.isPackaged
@@ -89,6 +100,7 @@ const COGNITIVE_CONSOLIDATION_MS = 15 * 60 * 1000
 
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
+let controlCenterWindow: BrowserWindow | null = null
 let isQuitting = false
 let triggerServerStarted = false
 let cognition: CognitiveSystem | null = null
@@ -137,6 +149,34 @@ function createMainWindow(): void {
   loadRenderer(mainWindow)
 }
 
+function createControlCenterWindow(): void {
+  if (controlCenterWindow && !controlCenterWindow.isDestroyed()) {
+    controlCenterWindow.show()
+    controlCenterWindow.focus()
+    return
+  }
+  controlCenterWindow = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 960,
+    minHeight: 640,
+    show: false,
+    autoHideMenuBar: true,
+    backgroundColor: '#05080d',
+    title: 'YUV Cognitive Control Centre',
+    icon,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false
+    }
+  })
+  wireWindow(controlCenterWindow)
+  loadRenderer(controlCenterWindow, 'control-centre')
+  controlCenterWindow.on('closed', () => {
+    controlCenterWindow = null
+  })
+}
+
 function wireWindow(win: BrowserWindow): void {
   win.on('ready-to-show', () => {
     win.show()
@@ -154,12 +194,39 @@ function wireWindow(win: BrowserWindow): void {
   })
 }
 
-function loadRenderer(win: BrowserWindow): void {
+function loadRenderer(win: BrowserWindow, view?: string): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+    if (view) url.searchParams.set('view', view)
+    win.loadURL(url.toString())
     win.webContents.openDevTools({ mode: 'detach' })
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'), {
+      search: view ? `view=${view}` : undefined
+    })
+  }
+}
+
+function controlSnapshot(): CognitiveControlSnapshot {
+  if (!cognition) throw new Error('Secure cognition is unavailable on this device.')
+  const knowledge = cognition.knowledge.list(500)
+  const self = cognition.self.snapshot()
+  return {
+    generatedAt: new Date().toISOString(),
+    cognition: cognition.store.stats(),
+    planning: cognition.planner.stats(),
+    knowledge: cognition.knowledge.stats(),
+    runtime: cognition.runtime.stats(),
+    memories: cognition.store.list({ limit: 500 }),
+    goals: cognition.planner.listGoals({ limit: 500 }),
+    entities: knowledge.entities,
+    facts: knowledge.facts,
+    skills: cognition.skills.list(),
+    actions: cognition.actions.list(500),
+    world: cognition.world.snapshot(),
+    capabilities: self.capabilities,
+    reasoningAudits: self.recentAudits,
+    privacy: getPrivacySettings()
   }
 }
 
@@ -249,6 +316,7 @@ app.whenReady().then(async () => {
       worldFilePath: join(app.getPath('userData'), 'world-v1.json'),
       skillsFilePath: join(app.getPath('userData'), 'skills-v1.json'),
       selfFilePath: join(app.getPath('userData'), 'self-v1.json'),
+      actionFilePath: join(app.getPath('userData'), 'actions-v1.json'),
       codec
     })
     await cognition.initialize()
@@ -277,6 +345,15 @@ app.whenReady().then(async () => {
     stopComputerUseLoop()
     broadcast('computer-control', { active: false, emergencyStopped: true })
     log.warn('[Safety] emergency stop activated')
+    void cognition?.actions.record({
+      action: 'Emergency stop',
+      source: 'safety',
+      risk: 'critical',
+      requiredApproval: false,
+      approved: true,
+      status: 'succeeded',
+      completedAt: new Date().toISOString()
+    })
   })
 
   app.on('browser-window-created', (_, window) => {
@@ -292,18 +369,25 @@ app.whenReady().then(async () => {
     const privacy = getPrivacySettings()
     if (input.tags?.includes('conversation') && !privacy.storeConversationMemory) return null
     if (input.tags?.includes('screen-observation') && !privacy.storeScreenMemory) return null
-    return cognition?.remember(input)
+    return cognition?.remember(applyConfiguredRetention(input, privacy))
   })
   ipcMain.handle('cognition:observe', (_event, input: ObservationInput) => {
     const privacy = getPrivacySettings()
     if (input.tags?.includes('conversation') && !privacy.storeConversationMemory) return null
     if (input.tags?.includes('screen-observation') && !privacy.storeScreenMemory) return null
-    return cognition?.observe(input)
+    return cognition?.observe(applyConfiguredRetention(input, privacy))
   })
   ipcMain.handle('cognition:recall', (_event, query: MemoryQuery) => cognition?.recall(query))
   ipcMain.handle('cognition:context', (_event, query: MemoryQuery) => cognition?.context(query))
   ipcMain.handle('cognition:audit', (_event, claim: string) => cognition?.auditClaim(claim))
   ipcMain.handle('cognition:stats', () => cognition?.store.stats())
+  ipcMain.handle('cognition:list', (_event, query?: MemoryListQuery) =>
+    cognition?.store.list(query)
+  )
+  ipcMain.handle('cognition:update', (_event, id: string, update: MemoryUpdate) =>
+    cognition?.store.update(id, update)
+  )
+  ipcMain.handle('cognition:delete', (_event, id: string) => cognition?.store.delete(id))
   ipcMain.handle('cognition:consolidate', () => cognition?.store.consolidate())
   ipcMain.handle('cognition:clear', () => cognition?.clearAll())
   ipcMain.handle('knowledge:learn', (_event, input: BeliefInput) => cognition?.learnBelief(input))
@@ -314,6 +398,13 @@ app.whenReady().then(async () => {
     cognition?.inspectEntity(entityId)
   )
   ipcMain.handle('knowledge:stats', () => cognition?.knowledge.stats())
+  ipcMain.handle('knowledge:list', (_event, limit?: number) => cognition?.knowledge.list(limit))
+  ipcMain.handle('knowledge:deleteBelief', (_event, id: string) =>
+    cognition?.knowledge.deleteBelief(id)
+  )
+  ipcMain.handle('knowledge:deleteEntity', (_event, id: string) =>
+    cognition?.knowledge.deleteEntity(id)
+  )
   ipcMain.handle('planning:createGoal', (_event, input: GoalInput) => cognition?.createGoal(input))
   ipcMain.handle('planning:setPlan', (_event, input: GoalPlanInput) => cognition?.planGoal(input))
   ipcMain.handle('planning:listGoals', (_event, query?: GoalQuery) => cognition?.listGoals(query))
@@ -335,6 +426,10 @@ app.whenReady().then(async () => {
     cognition?.setGoalStatus(goalId, status)
   )
   ipcMain.handle('planning:stats', () => cognition?.planner.stats())
+  ipcMain.handle('planning:updateGoal', (_event, id: string, update: GoalUpdate) =>
+    cognition?.planner.updateGoal(id, update)
+  )
+  ipcMain.handle('planning:deleteGoal', (_event, id: string) => cognition?.planner.deleteGoal(id))
   ipcMain.handle('runtime:ingest', (_event, input: PerceptionEventInput) => {
     const privacy = getPrivacySettings()
     if (input.modality === 'language' && !privacy.storeConversationMemory) return null
@@ -366,10 +461,48 @@ app.whenReady().then(async () => {
     cognition?.supervisor.emergencyStop()
     stopComputerUseLoop()
     broadcast('computer-control', { active: false, emergencyStopped: true })
+    return cognition?.actions.record({
+      action: 'Emergency stop',
+      source: 'safety',
+      risk: 'critical',
+      requiredApproval: false,
+      approved: true,
+      status: 'succeeded',
+      completedAt: new Date().toISOString()
+    })
   })
   ipcMain.handle('runtime:resetEmergencyStop', (_event, userConfirmed: boolean) =>
     cognition?.supervisor.reset(userConfirmed)
   )
+  ipcMain.handle('skills:list', () => cognition?.skills.list())
+  ipcMain.handle(
+    'skills:setStatus',
+    (_event, id: string, status: 'candidate' | 'verified' | 'disabled') =>
+      cognition?.skills.setStatus(id, status)
+  )
+  ipcMain.handle('skills:delete', (_event, id: string) => cognition?.skills.delete(id))
+  ipcMain.handle('actions:list', (_event, limit?: number) => cognition?.actions.list(limit))
+  ipcMain.handle('actions:delete', (_event, id: string) => cognition?.actions.delete(id))
+  ipcMain.handle('controlCenter:snapshot', () => controlSnapshot())
+  ipcMain.handle('controlCenter:open', () => createControlCenterWindow())
+  ipcMain.handle('controlCenter:export', async () => {
+    const owner =
+      controlCenterWindow && !controlCenterWindow.isDestroyed() ? controlCenterWindow : mainWindow
+    const options = {
+      title: 'Export YUV cognitive data',
+      defaultPath: `yuv-cognitive-export-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    }
+    const result = owner
+      ? await dialog.showSaveDialog(owner, options)
+      : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return { exported: false }
+    await writeFile(result.filePath, JSON.stringify(controlSnapshot(), null, 2), {
+      encoding: 'utf8',
+      mode: 0o600
+    })
+    return { exported: true, filePath: result.filePath }
+  })
 
   ipcMain.handle('store:isOnboardingComplete', () => isOnboardingComplete())
   ipcMain.handle('store:setOnboardingComplete', (_event, value: boolean) => {
@@ -471,6 +604,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('web-search', (_event, query: string) => startBackgroundSearch(query))
   ipcMain.handle('computer-action', async (_event, action: ComputerAction) => {
     const authorization = cognition?.supervisor.authorize(`direct ${action.action}`, false)
+    const audit = await cognition?.actions.record({
+      action: `Direct ${action.action}`,
+      source: 'direct-control',
+      risk: authorization?.risk ?? 'medium',
+      requiredApproval: authorization?.requiresApproval ?? false,
+      approved: authorization?.allowed ?? false,
+      status: authorization && !authorization.allowed ? 'blocked' : 'authorized',
+      detail: authorization?.reason
+    })
     if (authorization && !authorization.allowed) {
       return { ok: false, error: authorization.reason }
     }
@@ -486,16 +628,37 @@ app.whenReady().then(async () => {
     log.info(`[Control] action: ${action.action} ${detail}`.trim())
     try {
       await runComputerAction(action)
+      if (audit) await cognition?.actions.complete(audit.id, 'succeeded')
       return { ok: true }
     } catch (err) {
+      if (audit) await cognition?.actions.complete(audit.id, 'failed', undefined, String(err))
       log.error(`[Control] action failed: ${err}`)
       return { ok: false, error: String(err) }
     }
   })
   ipcMain.handle('control-computer', async (_event, task: string, approved = false) => {
     const authorization = cognition?.supervisor.authorize(task, approved)
+    const audit = await cognition?.actions.record({
+      action: task,
+      source: 'computer-use',
+      risk: authorization?.risk ?? 'medium',
+      requiredApproval: authorization?.requiresApproval ?? false,
+      approved,
+      status: authorization && !authorization.allowed ? 'blocked' : 'authorized',
+      detail: authorization?.reason
+    })
     if (authorization && !authorization.allowed) return `Approval required: ${authorization.reason}`
-    return runComputerUseLoop(task)
+    try {
+      const result = await runComputerUseLoop(task)
+      const succeeded = !/paused|snag|unavailable|could not|approval required/i.test(result)
+      if (audit) {
+        await cognition?.actions.complete(audit.id, succeeded ? 'succeeded' : 'failed', result)
+      }
+      return result
+    } catch (error) {
+      if (audit) await cognition?.actions.complete(audit.id, 'failed', undefined, String(error))
+      throw error
+    }
   })
 
   ipcMain.handle('complete-onboarding', () => {

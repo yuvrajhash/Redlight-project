@@ -3,10 +3,14 @@ import type {
   CognitionStats,
   ConsolidationResult,
   MemoryAuditResult,
+  MemoryDetail,
   MemoryKind,
+  MemoryListQuery,
   MemoryQuery,
   MemoryRecordInput,
   MemorySummary,
+  MemoryStatus,
+  MemoryUpdate,
   ObservationInput
 } from '../../shared/cognition'
 import {
@@ -19,8 +23,6 @@ import {
   scoreAttention
 } from './scoring.ts'
 import { DurableTextFile, type PersistenceCodec } from './persistence.ts'
-
-type MemoryStatus = 'active' | 'archived'
 
 type MemoryNode = MemorySummary & {
   source: MemoryRecordInput['source']
@@ -49,6 +51,13 @@ export type CognitionStoreOptions = {
 }
 
 const KINDS: MemoryKind[] = ['episodic', 'semantic', 'procedural', 'self', 'reflection']
+const SENSITIVE_MEMORY = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
+  /\b(?:password|passcode|api[_ -]?key|secret|auth(?:entication)?[_ -]?token)\s*[:=]/i,
+  /\bsk-[a-z0-9_-]{16,}\b/i,
+  /\b(?:otp|one[- ]time password)\s*[:=]?\s*\d{4,8}\b/i,
+  /\b(?:\d[ -]*?){13,19}\b/
+]
 
 function blankCounts(): Record<MemoryKind, number> {
   return { episodic: 0, semantic: 0, procedural: 0, self: 0, reflection: 0 }
@@ -110,6 +119,11 @@ export class CognitionStore {
   async remember(input: MemoryRecordInput): Promise<MemorySummary> {
     const content = input.content.trim()
     if (!content) throw new Error('Memory content cannot be empty.')
+    if (SENSITIVE_MEMORY.some((pattern) => pattern.test(content))) {
+      throw new Error(
+        'Credentials, payment details, and authentication codes cannot be remembered.'
+      )
+    }
     const now = this.now().toISOString()
     const node: MemoryNode = {
       id: randomUUID(),
@@ -227,6 +241,65 @@ export class CognitionStore {
       conflicting,
       explanation
     }
+  }
+
+  list(query: MemoryListQuery = {}): MemoryDetail[] {
+    const kinds = query.kinds ? new Set(query.kinds) : null
+    const statuses = query.statuses ? new Set(query.statuses) : null
+    const text = normalizeText(query.text ?? '')
+    const limit = Math.max(1, Math.min(500, query.limit ?? 200))
+    return this.memories
+      .filter((memory) => !kinds || kinds.has(memory.kind))
+      .filter((memory) => !statuses || statuses.has(memory.status))
+      .filter(
+        (memory) =>
+          !text || normalizeText(`${memory.content} ${memory.tags.join(' ')}`).includes(text)
+      )
+      .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, limit)
+      .map((memory) => structuredClone(memory))
+  }
+
+  async update(id: string, update: MemoryUpdate): Promise<MemoryDetail> {
+    const memory = this.memories.find((candidate) => candidate.id === id)
+    if (!memory) throw new Error('Memory not found.')
+    if (update.content !== undefined) {
+      const content = update.content.trim()
+      if (!content) throw new Error('Memory content cannot be empty.')
+      if (SENSITIVE_MEMORY.some((pattern) => pattern.test(content))) {
+        throw new Error(
+          'Credentials, payment details, and authentication codes cannot be remembered.'
+        )
+      }
+      memory.content = content
+    }
+    if (update.tags) {
+      memory.tags = [...new Set(update.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))]
+    }
+    if (update.confidence !== undefined) memory.confidence = clamp01(update.confidence)
+    if (update.salience !== undefined) memory.salience = clamp01(update.salience)
+    if (update.status) {
+      if (!['active', 'archived'].includes(update.status)) throw new Error('Invalid memory status.')
+      memory.status = update.status
+    }
+    if (update.expiresAt !== undefined) {
+      if (update.expiresAt && !Number.isFinite(Date.parse(update.expiresAt))) {
+        throw new Error('Memory expiry must be a valid timestamp.')
+      }
+      memory.expiresAt = update.expiresAt ?? undefined
+    }
+    memory.updatedAt = this.now().toISOString()
+    await this.persist()
+    return structuredClone(memory)
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const before = this.memories.length
+    this.memories = this.memories.filter((memory) => memory.id !== id)
+    this.workingMemory = this.workingMemory.filter((memory) => memory.id !== id)
+    if (this.memories.length === before) return false
+    await this.persist()
+    return true
   }
 
   async consolidate(): Promise<ConsolidationResult> {

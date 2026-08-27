@@ -168,4 +168,20 @@ describe('KnowledgeGraph', () => {
     assert.equal(graph.stats().beliefs, 0)
     assert.equal(graph.stats().entities, 0)
   })
+
+  it('lists and granularly deletes relationships and entities', async () => {
+    const { graph } = await createGraph()
+    const fact = await graph.learn({
+      subject: { name: 'YUV', kind: 'project' },
+      predicate: 'uses',
+      object: { name: 'Encrypted memory', kind: 'concept' },
+      source: 'system'
+    })
+    assert.equal(graph.list().facts.length, 1)
+    assert.equal(await graph.deleteBelief(fact.beliefId), true)
+    assert.equal(graph.stats().beliefs, 0)
+    const entity = graph.list().entities[0]!
+    assert.equal(await graph.deleteEntity(entity.id), true)
+    assert.equal(graph.stats().entities, 1)
+  })
 })

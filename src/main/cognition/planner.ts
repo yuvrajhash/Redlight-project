@@ -5,6 +5,7 @@ import type {
   GoalPlanInput,
   GoalQuery,
   GoalStatus,
+  GoalUpdate,
   NextAction,
   PlanStep,
   PlanningStats,
@@ -27,6 +28,7 @@ export type GoalPlannerOptions = {
 
 const TERMINAL_STEP_STATUSES = new Set(['completed', 'failed', 'skipped'])
 const VALID_GOAL_STATUSES: GoalStatus[] = ['active', 'paused', 'blocked', 'completed', 'cancelled']
+const VALID_PRIORITIES: Goal['priority'][] = ['low', 'normal', 'high', 'critical']
 
 export class GoalPlanner {
   private readonly now: () => Date
@@ -260,6 +262,50 @@ export class GoalPlanner {
     goal.updatedAt = now
     await this.persist()
     return this.cloneGoal(goal)
+  }
+
+  async updateGoal(goalId: string, update: GoalUpdate): Promise<Goal> {
+    const goal = this.requireGoal(goalId)
+    if (update.title !== undefined) {
+      const title = update.title.trim()
+      if (!title) throw new Error('A goal title cannot be empty.')
+      goal.title = title
+    }
+    if (update.desiredOutcome !== undefined) {
+      const outcome = update.desiredOutcome.trim()
+      if (!outcome) throw new Error('A desired outcome cannot be empty.')
+      goal.desiredOutcome = outcome
+    }
+    if (update.priority) {
+      if (!VALID_PRIORITIES.includes(update.priority)) throw new Error('Invalid goal priority.')
+      goal.priority = update.priority
+    }
+    if (update.status) {
+      if (!VALID_GOAL_STATUSES.includes(update.status)) throw new Error('Invalid goal status.')
+      if (['completed', 'cancelled'].includes(goal.status) && update.status !== goal.status) {
+        throw new Error('A terminal goal cannot be resumed or changed to another status.')
+      }
+      goal.status = update.status
+    }
+    if (update.targetAt !== undefined) {
+      if (update.targetAt && !Number.isFinite(Date.parse(update.targetAt))) {
+        throw new Error('Goal target must be a valid timestamp.')
+      }
+      goal.targetAt = update.targetAt ?? undefined
+    }
+    goal.updatedAt = this.now().toISOString()
+    if (goal.status === 'completed') goal.completedAt ??= goal.updatedAt
+    else goal.completedAt = undefined
+    await this.persist()
+    return this.cloneGoal(goal)
+  }
+
+  async deleteGoal(goalId: string): Promise<boolean> {
+    const before = this.goals.length
+    this.goals = this.goals.filter((goal) => goal.id !== goalId)
+    if (this.goals.length === before) return false
+    await this.persist()
+    return true
   }
 
   stats(): PlanningStats {

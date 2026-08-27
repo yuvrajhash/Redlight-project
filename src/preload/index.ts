@@ -19,6 +19,9 @@ const api: YUVAPI = {
     context: (query) => ipcRenderer.invoke('cognition:context', query),
     audit: (claim) => ipcRenderer.invoke('cognition:audit', claim),
     stats: () => ipcRenderer.invoke('cognition:stats'),
+    list: (query) => ipcRenderer.invoke('cognition:list', query),
+    update: (id, update) => ipcRenderer.invoke('cognition:update', id, update),
+    delete: (id) => ipcRenderer.invoke('cognition:delete', id),
     consolidate: () => ipcRenderer.invoke('cognition:consolidate'),
     clear: () => ipcRenderer.invoke('cognition:clear')
   },
@@ -26,7 +29,10 @@ const api: YUVAPI = {
     learn: (input) => ipcRenderer.invoke('knowledge:learn', input),
     query: (query) => ipcRenderer.invoke('knowledge:query', query),
     inspectEntity: (entityId) => ipcRenderer.invoke('knowledge:inspectEntity', entityId),
-    stats: () => ipcRenderer.invoke('knowledge:stats')
+    stats: () => ipcRenderer.invoke('knowledge:stats'),
+    list: (limit) => ipcRenderer.invoke('knowledge:list', limit),
+    deleteBelief: (id) => ipcRenderer.invoke('knowledge:deleteBelief', id),
+    deleteEntity: (id) => ipcRenderer.invoke('knowledge:deleteEntity', id)
   },
   planning: {
     createGoal: (input) => ipcRenderer.invoke('planning:createGoal', input),
@@ -39,7 +45,9 @@ const api: YUVAPI = {
     resolveStep: (goalId, stepId, outcome, succeeded) =>
       ipcRenderer.invoke('planning:resolveStep', goalId, stepId, outcome, succeeded),
     setGoalStatus: (goalId, status) => ipcRenderer.invoke('planning:setGoalStatus', goalId, status),
-    stats: () => ipcRenderer.invoke('planning:stats')
+    stats: () => ipcRenderer.invoke('planning:stats'),
+    updateGoal: (id, update) => ipcRenderer.invoke('planning:updateGoal', id, update),
+    deleteGoal: (id) => ipcRenderer.invoke('planning:deleteGoal', id)
   },
   runtime: {
     ingest: (input) => ipcRenderer.invoke('runtime:ingest', input),
@@ -65,6 +73,20 @@ const api: YUVAPI = {
   computerAction: (action) => ipcRenderer.invoke('computer-action', action),
   controlComputer: (task, approved = false) =>
     ipcRenderer.invoke('control-computer', task, approved),
+  skills: {
+    list: () => ipcRenderer.invoke('skills:list'),
+    setStatus: (id, status) => ipcRenderer.invoke('skills:setStatus', id, status),
+    delete: (id) => ipcRenderer.invoke('skills:delete', id)
+  },
+  actions: {
+    list: (limit) => ipcRenderer.invoke('actions:list', limit),
+    delete: (id) => ipcRenderer.invoke('actions:delete', id)
+  },
+  controlCenter: {
+    open: () => ipcRenderer.invoke('controlCenter:open'),
+    snapshot: () => ipcRenderer.invoke('controlCenter:snapshot'),
+    export: () => ipcRenderer.invoke('controlCenter:export')
+  },
   displays: {
     list: () => ipcRenderer.invoke('display:list'),
     select: (displayId) => ipcRenderer.invoke('display:select', displayId)

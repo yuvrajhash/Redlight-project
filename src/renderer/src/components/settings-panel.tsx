@@ -214,6 +214,13 @@ export function SettingsPanel() {
           )}
         </form>
         <div className="mt-3 border-t border-white/10 pt-2.5">
+          <button
+            type="button"
+            onClick={() => void window.api.controlCenter.open()}
+            className="mb-2.5 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-cyan-400/20 bg-cyan-400/10 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/15"
+          >
+            <Brain className="h-3.5 w-3.5" /> Open Cognitive Control Centre
+          </button>
           <div className="mb-2.5">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
               Private memory opt-in

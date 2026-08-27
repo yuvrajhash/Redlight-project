@@ -50,6 +50,35 @@ export type MemorySummary = {
   score?: number
 }
 
+export type MemoryStatus = 'active' | 'archived'
+
+export type MemoryDetail = MemorySummary & {
+  source: MemorySource
+  goalIds: string[]
+  evidence: Evidence[]
+  status: MemoryStatus
+  lastAccessedAt: string
+  accessCount: number
+  reinforcement: number
+  expiresAt?: string
+}
+
+export type MemoryListQuery = {
+  kinds?: MemoryKind[]
+  statuses?: MemoryStatus[]
+  text?: string
+  limit?: number
+}
+
+export type MemoryUpdate = {
+  content?: string
+  tags?: string[]
+  confidence?: number
+  salience?: number
+  status?: MemoryStatus
+  expiresAt?: string | null
+}
+
 export type CognitionStats = {
   totalMemories: number
   activeMemories: number

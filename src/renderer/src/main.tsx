@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './assets/main.css'
 
-document.body.classList.add('overlay')
+if (new URLSearchParams(window.location.search).get('view') !== 'control-centre') {
+  document.body.classList.add('overlay')
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

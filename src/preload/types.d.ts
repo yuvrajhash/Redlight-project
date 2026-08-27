@@ -5,8 +5,11 @@ import type {
   ConsolidationResult,
   MemoryQuery,
   MemoryAuditResult,
+  MemoryDetail,
+  MemoryListQuery,
   MemoryRecordInput,
   MemorySummary,
+  MemoryUpdate,
   ObservationInput
 } from '../shared/cognition'
 import type {
@@ -15,6 +18,7 @@ import type {
   GoalPlanInput,
   GoalQuery,
   GoalStatus,
+  GoalUpdate,
   NextAction,
   PlanStep,
   PlanningStats,
@@ -44,6 +48,10 @@ import type {
   WorldEntityInput,
   WorldSnapshot
 } from '../shared/runtime'
+import type { ActionAuditEntry } from '../shared/runtime'
+import type { CognitiveControlSnapshot, PrivacySettings } from '../shared/control-centre'
+
+export type { PrivacySettings } from '../shared/control-centre'
 
 export type KnownService = 'livekit' | 'openai' | 'google' | 'sarvam'
 
@@ -51,11 +59,6 @@ export type ProviderConfig = {
   llm: string
   stt: string
   tts: string
-}
-
-export type PrivacySettings = {
-  storeConversationMemory: boolean
-  storeScreenMemory: boolean
 }
 
 export type DisplayChoice = {
@@ -102,6 +105,9 @@ export type YUVAPI = {
     context: (query: MemoryQuery) => Promise<CognitiveContext>
     audit: (claim: string) => Promise<MemoryAuditResult>
     stats: () => Promise<CognitionStats>
+    list: (query?: MemoryListQuery) => Promise<MemoryDetail[]>
+    update: (id: string, update: MemoryUpdate) => Promise<MemoryDetail>
+    delete: (id: string) => Promise<boolean>
     consolidate: () => Promise<ConsolidationResult>
     clear: () => Promise<void>
   }
@@ -110,6 +116,9 @@ export type YUVAPI = {
     query: (query: KnowledgeQuery) => Promise<KnowledgeQueryResult>
     inspectEntity: (entityId: string) => Promise<KnowledgeQueryResult>
     stats: () => Promise<KnowledgeStats>
+    list: (limit?: number) => Promise<KnowledgeQueryResult>
+    deleteBelief: (id: string) => Promise<boolean>
+    deleteEntity: (id: string) => Promise<boolean>
   }
   planning: {
     createGoal: (input: GoalInput) => Promise<Goal>
@@ -126,6 +135,8 @@ export type YUVAPI = {
     ) => Promise<StepResolution>
     setGoalStatus: (goalId: string, status: GoalStatus) => Promise<Goal>
     stats: () => Promise<PlanningStats>
+    updateGoal: (id: string, update: GoalUpdate) => Promise<Goal>
+    deleteGoal: (id: string) => Promise<boolean>
   }
   runtime: {
     ingest: (input: PerceptionEventInput) => Promise<PerceptionEvent | null>
@@ -152,6 +163,20 @@ export type YUVAPI = {
   webSearch: (query: string) => Promise<{ started: boolean; busy?: boolean }>
   computerAction: (action: ComputerAction) => Promise<{ ok: boolean; error?: string }>
   controlComputer: (task: string, approved?: boolean) => Promise<string>
+  skills: {
+    list: () => Promise<SkillRecord[]>
+    setStatus: (id: string, status: SkillRecord['status']) => Promise<SkillRecord>
+    delete: (id: string) => Promise<boolean>
+  }
+  actions: {
+    list: (limit?: number) => Promise<ActionAuditEntry[]>
+    delete: (id: string) => Promise<boolean>
+  }
+  controlCenter: {
+    open: () => Promise<void>
+    snapshot: () => Promise<CognitiveControlSnapshot>
+    export: () => Promise<{ exported: boolean; filePath?: string }>
+  }
   displays: {
     list: () => Promise<DisplayChoice[]>
     select: (displayId: number | null) => Promise<void>
