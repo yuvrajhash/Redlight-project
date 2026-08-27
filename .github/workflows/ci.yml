@@ -20,10 +20,38 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      # The recovered lockfile predates the current pnpm patched-dependency metadata.
-      # Regenerate resolution metadata in CI until the native packaging patch is repinned.
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:identity
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm exec electron-vite build
+
+  package:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: win
+          - os: macos-latest
+            target: mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec electron-vite build
+      - run: pnpm exec electron-builder --${{ matrix.target }} --dir --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'

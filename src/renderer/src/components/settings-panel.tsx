@@ -5,18 +5,21 @@ import {
   KeyRound,
   LoaderCircle,
   Mic,
+  Monitor,
   RefreshCw,
   ShieldAlert,
   Trash2
 } from 'lucide-react'
 import { useStore } from '@/hooks/use-store'
-import { useFridaySessionContext } from '@/realtime/useFridaySession'
+import { useYUVSessionContext } from '@/realtime/useYUVSession'
 import type { CognitionStats } from '../../../shared/cognition'
 import type { RuntimeStats } from '../../../shared/runtime'
+import type { DisplayChoice } from '../../../preload/types'
+import type { PrivacySettings } from '../../../preload/types'
 
 export function SettingsPanel() {
-  const { saveApiKey, validateOpenAiKey } = useStore()
-  const { selectedMicId, setMicDevice, restart } = useFridaySessionContext()
+  const { saveApiKey, validateOpenAiKey, getPrivacySettings, setPrivacySettings } = useStore()
+  const { selectedMicId, setMicDevice, restart } = useYUVSessionContext()
   const [mics, setMics] = useState<MediaDeviceInfo[]>([])
   const [openaiKey, setOpenaiKey] = useState('')
   const [keyState, setKeyState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -25,6 +28,9 @@ export function SettingsPanel() {
   const [memoryBusy, setMemoryBusy] = useState(false)
   const [confirmForget, setConfirmForget] = useState(false)
   const [runtimeStats, setRuntimeStats] = useState<RuntimeStats | null>(null)
+  const [displays, setDisplays] = useState<DisplayChoice[]>([])
+  const [selectedDisplay, setSelectedDisplay] = useState<number | null>(null)
+  const [privacy, setPrivacy] = useState<PrivacySettings | null>(null)
 
   useEffect(() => {
     const refresh = async () => {
@@ -39,9 +45,19 @@ export function SettingsPanel() {
   useEffect(() => {
     void Promise.all([
       window.api.cognition.stats().then(setMemoryStats),
-      window.api.runtime.stats().then(setRuntimeStats)
+      window.api.runtime.stats().then(setRuntimeStats),
+      window.api.displays.list().then((choices) => {
+        setDisplays(choices)
+        setSelectedDisplay(choices.find((display) => display.selected)?.id ?? null)
+      }),
+      getPrivacySettings().then(setPrivacy)
     ])
   }, [])
+
+  const updatePrivacy = async (next: PrivacySettings) => {
+    setPrivacy(next)
+    await setPrivacySettings(next)
+  }
 
   const consolidateMemory = async () => {
     setMemoryBusy(true)
@@ -129,6 +145,29 @@ export function SettingsPanel() {
             </option>
           ))}
         </select>
+        <label
+          htmlFor="settings-display"
+          className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400"
+        >
+          <Monitor className="h-3 w-3" /> Screen for vision and control
+        </label>
+        <select
+          id="settings-display"
+          value={selectedDisplay ?? ''}
+          onChange={(event) => {
+            const next = event.target.value ? Number(event.target.value) : null
+            setSelectedDisplay(next)
+            void window.api.displays.select(next)
+          }}
+          className="mb-3 w-full rounded-lg border border-input bg-black/40 px-2.5 py-1.5 text-[11px] text-zinc-100 outline-none"
+        >
+          {displays.map((display) => (
+            <option key={display.id} value={display.id} className="bg-zinc-900">
+              {display.label} · {display.width}×{display.height}
+              {display.primary ? ' (Primary)' : ''}
+            </option>
+          ))}
+        </select>
         <form onSubmit={handleSaveKey}>
           <label
             htmlFor="settings-openai-key"
@@ -166,7 +205,7 @@ export function SettingsPanel() {
             <p className="mt-1 text-[10px] font-medium text-red-400">{keyError}</p>
           ) : keyState === 'saved' ? (
             <p className="mt-1 text-[10px] font-medium text-[#1FD5F9]">
-              Key updated — reconnecting Friday…
+              Key updated — reconnecting YUV…
             </p>
           ) : (
             <p className="mt-1 text-[10px] text-zinc-500">
@@ -175,6 +214,42 @@ export function SettingsPanel() {
           )}
         </form>
         <div className="mt-3 border-t border-white/10 pt-2.5">
+          <div className="mb-2.5">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              Private memory opt-in
+            </p>
+            <label className="flex items-center justify-between py-1 text-[10px] text-zinc-400">
+              Remember conversations
+              <input
+                type="checkbox"
+                checked={privacy?.storeConversationMemory ?? false}
+                onChange={(event) =>
+                  privacy &&
+                  void updatePrivacy({
+                    ...privacy,
+                    storeConversationMemory: event.target.checked
+                  })
+                }
+              />
+            </label>
+            <label className="flex items-center justify-between py-1 text-[10px] text-zinc-400">
+              Remember screen observations
+              <input
+                type="checkbox"
+                checked={privacy?.storeScreenMemory ?? false}
+                onChange={(event) =>
+                  privacy &&
+                  void updatePrivacy({
+                    ...privacy,
+                    storeScreenMemory: event.target.checked
+                  })
+                }
+              />
+            </label>
+            <p className="text-[9px] text-zinc-600">
+              Off by default. Saved cognition is encrypted.
+            </p>
+          </div>
           <div className="mb-1.5 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
               <Brain className="h-3 w-3" /> Cognitive memory
@@ -184,7 +259,7 @@ export function SettingsPanel() {
             </span>
           </div>
           <p className="mb-2 text-[10px] leading-relaxed text-zinc-500">
-            Friday recalls memory, tracks world state, learns verified procedures and audits its
+            YUV recalls memory, tracks world state, learns verified procedures and audits its
             reasoning locally.
           </p>
           {runtimeStats ? (

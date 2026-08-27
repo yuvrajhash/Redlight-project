@@ -1,25 +1,26 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type { SkillInput, SkillMatch, SkillOutcome, SkillRecord } from '../../shared/runtime'
 import { clamp01, lexicalSimilarity, normalizeText } from './scoring.ts'
+import { DurableTextFile, type PersistenceCodec } from './persistence.ts'
 
 type PersistedSkills = { version: 1; skills: SkillRecord[] }
 
 export class SkillLibrary {
-  private readonly filePath: string
   private readonly now: () => Date
   private skills: SkillRecord[] = []
   private writeChain: Promise<void> = Promise.resolve()
+  private readonly persistence: DurableTextFile
 
-  constructor(options: { filePath: string; now?: () => Date }) {
-    this.filePath = options.filePath
+  constructor(options: { filePath: string; now?: () => Date; codec?: PersistenceCodec }) {
     this.now = options.now ?? (() => new Date())
+    this.persistence = new DurableTextFile(options.filePath, options.codec)
   }
 
   async initialize(): Promise<void> {
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as PersistedSkills
+      const stored = await this.persistence.read()
+      if (!stored) return
+      const parsed = JSON.parse(stored) as PersistedSkills
       if (parsed.version === 1 && Array.isArray(parsed.skills)) this.skills = parsed.skills
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
@@ -145,10 +146,7 @@ export class SkillLibrary {
   private persist(): Promise<void> {
     const snapshot: PersistedSkills = { version: 1, skills: this.skills }
     this.writeChain = this.writeChain.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true })
-      const temporary = `${this.filePath}.tmp`
-      await writeFile(temporary, JSON.stringify(snapshot, null, 2), 'utf8')
-      await rename(temporary, this.filePath)
+      await this.persistence.write(JSON.stringify(snapshot, null, 2))
     })
     return this.writeChain
   }

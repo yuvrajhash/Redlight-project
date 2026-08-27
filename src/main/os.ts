@@ -14,32 +14,70 @@ export type ComputerAction = {
   path?: Array<{ x: number; y: number }>
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NutModule = any
 
 let nut: NutModule | null = null
 let nutLoadFailed = false
+let selectedDisplayId: number | null = null
 
-async function primaryScreenSource(thumbnailSize: { width: number; height: number }) {
-  const primary = screen.getPrimaryDisplay()
-  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize })
+export type DisplayChoice = {
+  id: number
+  label: string
+  width: number
+  height: number
+  primary: boolean
+  selected: boolean
+}
+
+export function listDisplays(): DisplayChoice[] {
+  const primaryId = screen.getPrimaryDisplay().id
+  return screen.getAllDisplays().map((display, index) => ({
+    id: display.id,
+    label: display.label || `Display ${index + 1}`,
+    width: display.size.width,
+    height: display.size.height,
+    primary: display.id === primaryId,
+    selected: display.id === (selectedDisplayId ?? primaryId)
+  }))
+}
+
+export function selectDisplay(displayId: number | null): void {
+  if (displayId != null && !screen.getAllDisplays().some((display) => display.id === displayId)) {
+    throw new Error('The selected display is no longer connected.')
+  }
+  selectedDisplayId = displayId
+}
+
+function targetDisplay() {
+  return (
+    screen.getAllDisplays().find((display) => display.id === selectedDisplayId) ??
+    screen.getPrimaryDisplay()
+  )
+}
+
+async function targetScreenSource(thumbnailSize: { width: number; height: number }) {
+  const display = targetDisplay()
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize
+  })
   if (sources.length === 0) throw new Error('No screen sources available')
-  const source = sources.find((candidate) => candidate.display_id === String(primary.id))
+  const source = sources.find((candidate) => candidate.display_id === String(display.id))
   if (!source) {
-    throw new Error('The primary display could not be matched to a screen-capture source.')
+    throw new Error('The selected display could not be matched to a screen-capture source.')
   }
   return source
 }
 
 export async function captureScreen(): Promise<string> {
-  const display = screen.getPrimaryDisplay()
+  const display = targetDisplay()
   const { width, height } = display.size
   const scale = Math.min(1, 1280 / Math.max(width, height))
   const thumbnailSize = {
     width: Math.round(width * scale),
     height: Math.round(height * scale)
   }
-  const source = await primaryScreenSource(thumbnailSize)
+  const source = await targetScreenSource(thumbnailSize)
   const jpeg = source.thumbnail.toJPEG(70)
   return `data:image/jpeg;base64,${jpeg.toString('base64')}`
 }
@@ -49,10 +87,10 @@ export async function captureScreenForControl(): Promise<{
   width: number
   height: number
 }> {
-  const display = screen.getPrimaryDisplay()
+  const display = targetDisplay()
   const { width, height } = display.size
   const scale = Math.min(1, 1920 / Math.max(width, height))
-  const source = await primaryScreenSource({
+  const source = await targetScreenSource({
     width: Math.round(width * scale),
     height: Math.round(height * scale)
   })
@@ -125,7 +163,7 @@ export async function runComputerAction(a: ComputerAction): Promise<void> {
   const n = await getNut()
   if (!n) throw new Error('Input injection unavailable (nut.js failed to load)')
   const toPoint = async () => {
-    const bounds = screen.getPrimaryDisplay().bounds
+    const bounds = targetDisplay().bounds
     const px = bounds.x + Math.round(((a.x ?? 0) / 1000) * bounds.width)
     const py = bounds.y + Math.round(((a.y ?? 0) / 1000) * bounds.height)
     return new n.Point(px, py)
@@ -169,7 +207,7 @@ export async function runComputerAction(a: ComputerAction): Promise<void> {
     }
     case 'drag': {
       if (!a.path || a.path.length < 2) break
-      const bounds = screen.getPrimaryDisplay().bounds
+      const bounds = targetDisplay().bounds
       const pts = a.path.map(
         (p) =>
           new n.Point(
@@ -195,7 +233,9 @@ let sawAnyEvent = false
 
 export async function startPushToTalk(onChange: (active: boolean) => void): Promise<void> {
   if (started) return
-  let uIOhookModule: { uIOhook: { on: Function; start: Function; stop: Function } }
+  let uIOhookModule: {
+    uIOhook: { on: Function; start: Function; stop: Function }
+  }
   try {
     uIOhookModule = nativeRequire('uiohook-napi')
   } catch (err) {
@@ -243,7 +283,7 @@ export async function triggerInputMonitoringPrompt(): Promise<void> {
   const hook = uIOhookModule.uIOhook
   try {
     hook.start()
-    log.info('[PTT] input-monitoring prompt: started listen tap to register Friday in the list')
+    log.info('[PTT] input-monitoring prompt: started listen tap to register YUV in the list')
   } catch (err) {
     log.warn(`[PTT] input-monitoring prompt: failed to start listen tap: ${err}`)
     return

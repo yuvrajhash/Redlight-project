@@ -1,6 +1,6 @@
 import { AgentAudioVisualizerAura } from './agents-ui/agent-audio-visualizer-aura'
 
-export function FridayOrb({
+export function YUVOrb({
   speaking,
   audioTrack
 }: {

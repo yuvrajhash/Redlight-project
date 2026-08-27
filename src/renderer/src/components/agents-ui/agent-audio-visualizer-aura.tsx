@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { AgentState } from '@/realtime/useFridaySession'
+import type { AgentState } from '@/realtime/useYUVSession'
 
 const STATE_COLORS: Record<AgentState, [number, number, number]> = {
   connecting: [0.3, 0.35, 0.4],
@@ -56,10 +56,7 @@ export function AgentAudioVisualizerAura({
     if (!gl) return
 
     const vs = gl.createShader(gl.VERTEX_SHADER)!
-    gl.shaderSource(
-      vs,
-      `attribute vec2 p; void main(){ gl_Position = vec4(p,0.0,1.0); }`
-    )
+    gl.shaderSource(vs, `attribute vec2 p; void main(){ gl_Position = vec4(p,0.0,1.0); }`)
     gl.compileShader(vs)
     const fs = gl.createShader(gl.FRAGMENT_SHADER)!
     gl.shaderSource(

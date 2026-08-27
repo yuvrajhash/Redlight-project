@@ -1,11 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { FridayAPI } from './types'
+import type { YUVAPI } from './types'
 
 const onboardingArg = process.argv.find((arg) => arg.startsWith('--onboarding-complete='))
 const initialOnboardingComplete = onboardingArg ? onboardingArg.split('=')[1] === 'true' : false
 
-const api: FridayAPI = {
+const api: YUVAPI = {
   ping: () => ipcRenderer.send('ping'),
   log: (scope, message) => ipcRenderer.send('app:log', scope, message),
   completeOnboarding: () => ipcRenderer.invoke('complete-onboarding'),
@@ -65,6 +65,10 @@ const api: FridayAPI = {
   computerAction: (action) => ipcRenderer.invoke('computer-action', action),
   controlComputer: (task, approved = false) =>
     ipcRenderer.invoke('control-computer', task, approved),
+  displays: {
+    list: () => ipcRenderer.invoke('display:list'),
+    select: (displayId) => ipcRenderer.invoke('display:select', displayId)
+  },
   store: {
     initialOnboardingComplete,
     isOnboardingComplete: () => ipcRenderer.invoke('store:isOnboardingComplete'),
@@ -75,6 +79,8 @@ const api: FridayAPI = {
     validateOpenAiKey: (key) => ipcRenderer.invoke('store:validateOpenAiKey', key),
     getProviderConfig: () => ipcRenderer.invoke('store:getProviderConfig'),
     setProviderConfig: (config) => ipcRenderer.invoke('store:setProviderConfig', config),
+    getPrivacySettings: () => ipcRenderer.invoke('store:getPrivacySettings'),
+    setPrivacySettings: (settings) => ipcRenderer.invoke('store:setPrivacySettings', settings),
     resetStore: () => ipcRenderer.invoke('store:resetStore')
   },
   permissions: {
@@ -89,11 +95,6 @@ const api: FridayAPI = {
     triggerInputMonitoringPrompt: () =>
       ipcRenderer.invoke('permissions:triggerInputMonitoringPrompt'),
     openInputMonitoringSettings: () => ipcRenderer.invoke('permissions:openInputMonitoringSettings')
-  },
-  auth: {
-    signInWithGoogle: () => ipcRenderer.invoke('auth:signInWithGoogle'),
-    getUser: () => ipcRenderer.invoke('auth:getUser'),
-    signOut: () => ipcRenderer.invoke('auth:signOut')
   }
 }
 

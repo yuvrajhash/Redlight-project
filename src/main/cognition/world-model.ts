@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type {
   WorldChange,
   WorldEntity,
@@ -8,6 +6,7 @@ import type {
   WorldSnapshot
 } from '../../shared/runtime'
 import { clamp01, normalizeText } from './scoring.ts'
+import { DurableTextFile, type PersistenceCodec } from './persistence.ts'
 
 type PersistedWorld = {
   version: 1
@@ -19,25 +18,28 @@ export type WorldModelOptions = {
   filePath: string
   now?: () => Date
   maxChanges?: number
+  codec?: PersistenceCodec
 }
 
 export class WorldModel {
-  private readonly filePath: string
   private readonly now: () => Date
   private readonly maxChanges: number
   private entities: WorldEntity[] = []
   private changes: WorldChange[] = []
   private writeChain: Promise<void> = Promise.resolve()
+  private readonly persistence: DurableTextFile
 
   constructor(options: WorldModelOptions) {
-    this.filePath = options.filePath
     this.now = options.now ?? (() => new Date())
     this.maxChanges = options.maxChanges ?? 2_000
+    this.persistence = new DurableTextFile(options.filePath, options.codec)
   }
 
   async initialize(): Promise<void> {
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as PersistedWorld
+      const stored = await this.persistence.read()
+      if (!stored) return
+      const parsed = JSON.parse(stored) as PersistedWorld
       if (parsed.version !== 1 || !Array.isArray(parsed.entities)) return
       this.entities = parsed.entities
       this.changes = Array.isArray(parsed.changes) ? parsed.changes.slice(-this.maxChanges) : []
@@ -167,10 +169,7 @@ export class WorldModel {
       changes: this.changes
     }
     this.writeChain = this.writeChain.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true })
-      const temporary = `${this.filePath}.tmp`
-      await writeFile(temporary, JSON.stringify(snapshot, null, 2), 'utf8')
-      await rename(temporary, this.filePath)
+      await this.persistence.write(JSON.stringify(snapshot, null, 2))
     })
     return this.writeChain
   }

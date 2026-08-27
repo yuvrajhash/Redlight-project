@@ -17,11 +17,3 @@ allowBuilds:
   esbuild: true
   msw: true
   uiohook-napi: true
-
-# The recovered lockfile resolves app-builder-lib 26.15.3 while the historical native-packaging
-# patch below targets 26.8.1. Keep the patch for packaging archaeology, but do not block application
-# installs until the patch is repinned and installer behavior is reverified.
-allowUnusedPatches: true
-
-patchedDependencies:
-  app-builder-lib@26.8.1: patches/app-builder-lib@26.8.1.patch

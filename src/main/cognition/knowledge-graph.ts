@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type {
   Belief,
   BeliefFact,
@@ -13,6 +11,7 @@ import type {
 } from '../../shared/knowledge'
 import { clamp01, normalizeText, recencyScore } from './scoring.ts'
 import { semanticSimilarity } from './semantic-vector.ts'
+import { DurableTextFile, type PersistenceCodec } from './persistence.ts'
 
 const SENSITIVE_PATTERNS = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
@@ -34,27 +33,30 @@ export type KnowledgeGraphOptions = {
   now?: () => Date
   maxEntities?: number
   maxBeliefs?: number
+  codec?: PersistenceCodec
 }
 
 export class KnowledgeGraph {
-  private readonly filePath: string
   private readonly now: () => Date
   private readonly maxEntities: number
   private readonly maxBeliefs: number
   private entities: Entity[] = []
   private beliefs: Belief[] = []
   private writeChain: Promise<void> = Promise.resolve()
+  private readonly persistence: DurableTextFile
 
   constructor(options: KnowledgeGraphOptions) {
-    this.filePath = options.filePath
     this.now = options.now ?? (() => new Date())
     this.maxEntities = options.maxEntities ?? 20_000
     this.maxBeliefs = options.maxBeliefs ?? 50_000
+    this.persistence = new DurableTextFile(options.filePath, options.codec)
   }
 
   async initialize(): Promise<void> {
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as PersistedKnowledge
+      const stored = await this.persistence.read()
+      if (!stored) return
+      const parsed = JSON.parse(stored) as PersistedKnowledge
       if (
         parsed.version !== 1 ||
         !Array.isArray(parsed.entities) ||
@@ -231,7 +233,10 @@ export class KnowledgeGraph {
           ...(existing.name !== name ? [name] : [])
         ])
       ]
-      existing.attributes = { ...existing.attributes, ...(input.attributes ?? {}) }
+      existing.attributes = {
+        ...existing.attributes,
+        ...(input.attributes ?? {})
+      }
       existing.confidence = Math.max(existing.confidence, clamp01(input.confidence ?? 0.8))
       existing.mentionCount++
       existing.updatedAt = now
@@ -373,10 +378,7 @@ export class KnowledgeGraph {
       beliefs: this.beliefs
     }
     this.writeChain = this.writeChain.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true })
-      const temporary = `${this.filePath}.tmp`
-      await writeFile(temporary, JSON.stringify(snapshot, null, 2), 'utf8')
-      await rename(temporary, this.filePath)
+      await this.persistence.write(JSON.stringify(snapshot, null, 2))
     })
     return this.writeChain
   }

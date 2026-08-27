@@ -1,5 +1,3 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
   CognitionStats,
@@ -20,6 +18,7 @@ import {
   recencyScore,
   scoreAttention
 } from './scoring.ts'
+import { DurableTextFile, type PersistenceCodec } from './persistence.ts'
 
 type MemoryStatus = 'active' | 'archived'
 
@@ -46,6 +45,7 @@ export type CognitionStoreOptions = {
   maxMemories?: number
   workingMemoryLimit?: number
   attentionThreshold?: number
+  codec?: PersistenceCodec
 }
 
 const KINDS: MemoryKind[] = ['episodic', 'semantic', 'procedural', 'self', 'reflection']
@@ -55,7 +55,6 @@ function blankCounts(): Record<MemoryKind, number> {
 }
 
 export class CognitionStore {
-  private readonly filePath: string
   private readonly now: () => Date
   private readonly maxMemories: number
   private readonly workingMemoryLimit: number
@@ -64,18 +63,21 @@ export class CognitionStore {
   private workingMemory: MemorySummary[] = []
   private lastConsolidatedAt: string | null = null
   private writeChain: Promise<void> = Promise.resolve()
+  private readonly persistence: DurableTextFile
 
   constructor(options: CognitionStoreOptions) {
-    this.filePath = options.filePath
     this.now = options.now ?? (() => new Date())
     this.maxMemories = options.maxMemories ?? 10_000
     this.workingMemoryLimit = options.workingMemoryLimit ?? 12
     this.attentionThreshold = options.attentionThreshold ?? 0.38
+    this.persistence = new DurableTextFile(options.filePath, options.codec)
   }
 
   async initialize(): Promise<void> {
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as PersistedCognition
+      const stored = await this.persistence.read()
+      if (!stored) return
+      const parsed = JSON.parse(stored) as PersistedCognition
       if (parsed.version !== 1 || !Array.isArray(parsed.memories)) return
       this.memories = parsed.memories.filter((memory) => KINDS.includes(memory.kind))
       this.lastConsolidatedAt = parsed.lastConsolidatedAt ?? null
@@ -358,10 +360,7 @@ export class CognitionStore {
       lastConsolidatedAt: this.lastConsolidatedAt
     }
     this.writeChain = this.writeChain.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true })
-      const temporary = `${this.filePath}.tmp`
-      await writeFile(temporary, JSON.stringify(snapshot, null, 2), 'utf8')
-      await rename(temporary, this.filePath)
+      await this.persistence.write(JSON.stringify(snapshot, null, 2))
     })
     return this.writeChain
   }

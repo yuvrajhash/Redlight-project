@@ -8,19 +8,19 @@ import {
   type ReactNode
 } from 'react'
 import { OpenAIRealtimeWebRTC, RealtimeAgent, RealtimeSession } from '@openai/agents/realtime'
-import { createFridayTools } from './tools'
+import { createYUVTools } from './tools'
 
 export type AgentState = 'connecting' | 'idle' | 'listening' | 'thinking' | 'speaking' | 'failed'
 
 export type MicMode = 'always' | 'ptt'
 
 const FALLBACK_INSTRUCTIONS =
-  'You are F.R.I.D.A.Y., a calm, concise voice assistant. Keep replies short and conversational — usually one sentence. Speak naturally.'
-const GREETING = "Greet the user briefly with: 'Friday online, boss.'"
-const MIC_DEVICE_KEY = 'friday.micDeviceId'
-const MIC_MODE_KEY = 'friday.micMode'
+  'You are YUV, a calm, concise voice assistant. Keep replies short and conversational — usually one sentence. Speak naturally.'
+const GREETING = "Greet the user briefly with: 'YUV online.'"
+const MIC_DEVICE_KEY = 'yuv.micDeviceId'
+const MIC_MODE_KEY = 'yuv.micMode'
 
-export type FridaySessionValue = {
+export type YUVSessionValue = {
   agentState: AgentState
   remoteTrack: MediaStreamTrack | null
   micMode: MicMode
@@ -33,22 +33,22 @@ export type FridaySessionValue = {
   restart: () => void
 }
 
-const FridaySessionContext = createContext<FridaySessionValue | null>(null)
+const YUVSessionContext = createContext<YUVSessionValue | null>(null)
 
-export function useFridaySessionContext(): FridaySessionValue {
-  const ctx = useContext(FridaySessionContext)
+export function useYUVSessionContext(): YUVSessionValue {
+  const ctx = useContext(YUVSessionContext)
   if (!ctx) {
-    throw new Error('useFridaySessionContext must be used within <FridaySessionProvider>')
+    throw new Error('useYUVSessionContext must be used within <YUVSessionProvider>')
   }
   return ctx
 }
 
-export function FridaySessionProvider({ children }: { children: ReactNode }) {
-  const value = useFridaySession()
-  return <FridaySessionContext.Provider value={value}>{children}</FridaySessionContext.Provider>
+export function YUVSessionProvider({ children }: { children: ReactNode }) {
+  const value = useYUVSession()
+  return <YUVSessionContext.Provider value={value}>{children}</YUVSessionContext.Provider>
 }
 
-export function useFridaySession(): FridaySessionValue {
+export function useYUVSession(): YUVSessionValue {
   const initialMicMode: MicMode =
     window.localStorage.getItem(MIC_MODE_KEY) === 'always' ? 'always' : 'ptt'
   const [agentState, setAgentState] = useState<AgentState>('connecting')
@@ -62,9 +62,7 @@ export function useFridaySession(): FridaySessionValue {
     () => window.localStorage.getItem(MIC_DEVICE_KEY) ?? ''
   )
   const [generation, setGeneration] = useState(0)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sessionRef = useRef<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transportRef = useRef<any>(null)
   const audioElRef = useRef<HTMLAudioElement | null>(null)
   const speakingRef = useRef(false)
@@ -120,7 +118,7 @@ export function useFridaySession(): FridaySessionValue {
         void window.api.runtime
           .ingest({
             modality: 'language',
-            source: 'friday-response',
+            source: 'yuv-response',
             content: transcript,
             confidence: 0.7,
             novelty: 0.35,
@@ -131,7 +129,7 @@ export function useFridaySession(): FridaySessionValue {
         void window.api.cognition
           .remember({
             kind: 'reflection',
-            content: `Friday replied: ${transcript}`,
+            content: `YUV replied: ${transcript}`,
             source: 'assistant',
             tags: ['conversation', 'assistant-response'],
             confidence: 0.7,
@@ -186,7 +184,7 @@ export function useFridaySession(): FridaySessionValue {
         const audioEl = new Audio()
         audioEl.autoplay = true
         audioElRef.current = audioEl
-        const tools = createFridayTools({
+        const tools = createYUVTools({
           visionMode: cfg?.visionMode ?? 'subagent',
           controlBrain: cfg?.controlBrain ?? 'openai-cua',
           inject: (event) => sessionRef.current?.transport.sendEvent(event),
@@ -205,7 +203,7 @@ export function useFridaySession(): FridaySessionValue {
           }
         })
         const agent = new RealtimeAgent({
-          name: 'friday',
+          name: 'yuv',
           voice: cfg?.voice ?? 'marin',
           instructions: [cfg?.systemPrompt ?? FALLBACK_INSTRUCTIONS, memoryContext.text]
             .filter(Boolean)
@@ -334,11 +332,11 @@ export function useFridaySession(): FridaySessionValue {
   useEffect(() => {
     const handler = (_e: unknown, payload: { answer: string | null }) => {
       const instructions = payload.answer
-        ? `Your background internet search just came back. Tell the boss what you found in one or two short, natural spoken sentences — confident and casual, no lists or number dumps. Speak ONLY facts from the result below; if it contradicts anything you said earlier, THIS is the truth — correct yourself naturally. Do not add facts that aren't here.
+        ? `Your background internet search just came back. Tell the user what you found in one or two short, natural spoken sentences — confident and casual, no lists or number dumps. Speak ONLY facts from the result below; if it contradicts anything you said earlier, THIS is the truth — correct yourself naturally. Do not add facts that aren't here.
 
 Result:
 ${payload.answer}`
-        : "Your background internet search failed. Tell the boss briefly you couldn't pull it up right now."
+        : "Your background internet search failed. Tell the user briefly you couldn't pull it up right now."
       if (payload.answer) {
         void window.api.runtime.ingest({
           modality: 'tool',

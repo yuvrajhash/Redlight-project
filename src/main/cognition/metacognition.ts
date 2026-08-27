@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type {
   CapabilityInput,
   CapabilityRecord,
@@ -8,6 +6,7 @@ import type {
   ReasoningAuditInput
 } from '../../shared/runtime'
 import { clamp01, hasNegativePolarity, normalizeText } from './scoring.ts'
+import { DurableTextFile, type PersistenceCodec } from './persistence.ts'
 
 type PersistedSelf = {
   version: 1
@@ -16,20 +15,22 @@ type PersistedSelf = {
 }
 
 export class SelfModel {
-  private readonly filePath: string
   private readonly now: () => Date
   private capabilities: CapabilityRecord[] = []
   private audits: ReasoningAudit[] = []
   private writeChain: Promise<void> = Promise.resolve()
+  private readonly persistence: DurableTextFile
 
-  constructor(options: { filePath: string; now?: () => Date }) {
-    this.filePath = options.filePath
+  constructor(options: { filePath: string; now?: () => Date; codec?: PersistenceCodec }) {
     this.now = options.now ?? (() => new Date())
+    this.persistence = new DurableTextFile(options.filePath, options.codec)
   }
 
   async initialize(): Promise<void> {
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as PersistedSelf
+      const stored = await this.persistence.read()
+      if (!stored) return
+      const parsed = JSON.parse(stored) as PersistedSelf
       if (parsed.version !== 1) return
       this.capabilities = Array.isArray(parsed.capabilities) ? parsed.capabilities : []
       this.audits = Array.isArray(parsed.audits) ? parsed.audits.slice(-500) : []
@@ -173,10 +174,7 @@ export class SelfModel {
       audits: this.audits
     }
     this.writeChain = this.writeChain.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true })
-      const temporary = `${this.filePath}.tmp`
-      await writeFile(temporary, JSON.stringify(snapshot, null, 2), 'utf8')
-      await rename(temporary, this.filePath)
+      await this.persistence.write(JSON.stringify(snapshot, null, 2))
     })
     return this.writeChain
   }

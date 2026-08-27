@@ -3,7 +3,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 export async function validateGoogleApiKey(apiKey: string): Promise<boolean> {
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-embedding-2-preview' })
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-embedding-2-preview'
+    })
     const result = await model.embedContent('hello')
     const values = result.embedding.values
     return Array.isArray(values) && values.length > 0

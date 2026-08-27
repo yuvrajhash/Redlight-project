@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type {
   Goal,
   GoalInput,
@@ -13,6 +11,7 @@ import type {
   StepResolution
 } from '../../shared/planning'
 import { lexicalSimilarity } from './scoring.ts'
+import { DurableTextFile, type PersistenceCodec } from './persistence.ts'
 
 type PersistedPlanning = {
   version: 1
@@ -23,27 +22,30 @@ export type GoalPlannerOptions = {
   filePath: string
   now?: () => Date
   maxGoals?: number
+  codec?: PersistenceCodec
 }
 
 const TERMINAL_STEP_STATUSES = new Set(['completed', 'failed', 'skipped'])
 const VALID_GOAL_STATUSES: GoalStatus[] = ['active', 'paused', 'blocked', 'completed', 'cancelled']
 
 export class GoalPlanner {
-  private readonly filePath: string
   private readonly now: () => Date
   private readonly maxGoals: number
   private goals: Goal[] = []
   private writeChain: Promise<void> = Promise.resolve()
+  private readonly persistence: DurableTextFile
 
   constructor(options: GoalPlannerOptions) {
-    this.filePath = options.filePath
     this.now = options.now ?? (() => new Date())
     this.maxGoals = options.maxGoals ?? 100
+    this.persistence = new DurableTextFile(options.filePath, options.codec)
   }
 
   async initialize(): Promise<void> {
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as PersistedPlanning
+      const stored = await this.persistence.read()
+      if (!stored) return
+      const parsed = JSON.parse(stored) as PersistedPlanning
       if (parsed.version !== 1 || !Array.isArray(parsed.goals)) return
       this.goals = parsed.goals.filter((goal) => VALID_GOAL_STATUSES.includes(goal.status))
     } catch (error) {
@@ -134,7 +136,10 @@ export class GoalPlanner {
 
   nextActions(limit = 5): NextAction[] {
     const actions: NextAction[] = []
-    for (const goal of this.listGoals({ statuses: ['active', 'blocked'], limit: 100 })) {
+    for (const goal of this.listGoals({
+      statuses: ['active', 'blocked'],
+      limit: 100
+    })) {
       if (goal.status !== 'active') continue
       for (const step of goal.steps) {
         if (TERMINAL_STEP_STATUSES.has(step.status) || step.status === 'in_progress') continue
@@ -298,10 +303,7 @@ export class GoalPlanner {
   private persist(): Promise<void> {
     const snapshot: PersistedPlanning = { version: 1, goals: this.goals }
     this.writeChain = this.writeChain.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true })
-      const temporary = `${this.filePath}.tmp`
-      await writeFile(temporary, JSON.stringify(snapshot, null, 2), 'utf8')
-      await rename(temporary, this.filePath)
+      await this.persistence.write(JSON.stringify(snapshot, null, 2))
     })
     return this.writeChain
   }

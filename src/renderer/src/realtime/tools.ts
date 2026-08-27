@@ -20,7 +20,7 @@ const entitySchema = z.object({
   attributes: z.record(z.string()).optional()
 })
 
-export function createFridayTools({
+export function createYUVTools({
   visionMode,
   controlBrain,
   inject,
@@ -40,12 +40,12 @@ export function createFridayTools({
 
   const lookAtScreen = tool({
     name: 'look_at_screen',
-    description: `Sees the boss's screen to answer a question about what's on it. Call this whenever the boss refers to something on screen — "what is this", "read this", "what does this error say", "how do I fix this" — or any request using "this / that / here / it" pointing at the display. The screen changes constantly, so always call this fresh; never reuse an earlier look.`,
+    description: `Sees the user's screen to answer a question about what's on it. Call this whenever the user refers to something on screen — "what is this", "read this", "what does this error say", "how do I fix this" — or any request using "this / that / here / it" pointing at the display. The screen changes constantly, so always call this fresh; never reuse an earlier look.`,
     parameters: z.object({
       question: z
         .string()
         .describe(
-          'What the boss wants to know about the screen, e.g. "what does this error mean". Phrase it as the actual question to answer from the screenshot.'
+          'What the user wants to know about the screen, e.g. "what does this error mean". Phrase it as the actual question to answer from the screenshot.'
         )
     }),
     execute: async ({ question }) => {
@@ -76,7 +76,7 @@ export function createFridayTools({
         return answer
       }
       const { image } = await window.api.captureScreen()
-      if (!image) return 'Could not capture the screen right now, boss.'
+      if (!image) return 'Could not capture the screen right now, user.'
       void window.api.runtime.ingest({
         modality: 'vision',
         source: 'screen-capture',
@@ -125,16 +125,16 @@ export function createFridayTools({
         )
       const { busy } = await window.api.webSearch(query)
       if (busy) {
-        return `You're already searching — do NOT call search_web again. Just say you're still looking ("Still pulling it up, boss.") and wait; the answer is on its way.`
+        return `You're already searching — do NOT call search_web again. Just say you're still looking ("Still pulling it up, user.") and wait; the answer is on its way.`
       }
-      return `Search started in the background. Your ONLY job this turn is to say ONE short filler line that you're looking it up (e.g. "Looking into it, boss — one sec."). Do NOT answer the question, do NOT summarize, do NOT guess or use your own knowledge — it is stale. STOP after the filler line. The real answer will be delivered to you in a few seconds; speak ONLY that when it arrives.`
+      return `Search started in the background. Your ONLY job this turn is to say ONE short filler line that you're looking it up (e.g. "Looking into it, user — one sec."). Do NOT answer the question, do NOT summarize, do NOT guess or use your own knowledge — it is stale. STOP after the filler line. The real answer will be delivered to you in a few seconds; speak ONLY that when it arrives.`
     }
   })
 
   const recallMemory = tool({
     name: 'recall_memory',
     description:
-      'Searches Friday long-term memory for prior conversations, user preferences, corrections, past outcomes, learned procedures, or known facts. Use when the user asks what they previously said, refers to an earlier event, or when past experience could materially improve the answer.',
+      'Searches YUV long-term memory for prior conversations, user preferences, corrections, past outcomes, learned procedures, or known facts. Use when the user asks what they previously said, refers to an earlier event, or when past experience could materially improve the answer.',
     parameters: z.object({
       query: z.string().describe('A concise description of what should be remembered.'),
       kinds: z
@@ -155,7 +155,7 @@ export function createFridayTools({
   const rememberThis = tool({
     name: 'remember_this',
     description:
-      'Stores a durable memory only when the user explicitly asks Friday to remember something, states a stable preference, teaches a reusable procedure, or corrects a previous belief. Do not store passwords, API keys, payment details, or other secrets.',
+      'Stores a durable memory only when the user explicitly asks YUV to remember something, states a stable preference, teaches a reusable procedure, or corrects a previous belief. Do not store passwords, API keys, payment details, or other secrets.',
     parameters: z.object({
       content: z
         .string()
@@ -163,7 +163,7 @@ export function createFridayTools({
       kind: z
         .enum(['semantic', 'procedural', 'self'])
         .describe(
-          'semantic=fact/preference, procedural=how-to, self=Friday capability or limitation.'
+          'semantic=fact/preference, procedural=how-to, self=YUV capability or limitation.'
         ),
       tags: z.array(z.string()).optional().describe('A few short retrieval tags.')
     }),
@@ -183,7 +183,7 @@ export function createFridayTools({
   const auditMemory = tool({
     name: 'audit_memory',
     description:
-      'Checks a claim against Friday stored memories, including contradictory experiences and evidence. This audits internal consistency only. Use live web search as well when the claim is current or externally verifiable.',
+      'Checks a claim against YUV stored memories, including contradictory experiences and evidence. This audits internal consistency only. Use live web search as well when the claim is current or externally verifiable.',
     parameters: z.object({
       claim: z.string().describe('The precise claim to check against long-term memory.')
     }),
@@ -259,7 +259,7 @@ export function createFridayTools({
   const queryKnowledge = tool({
     name: 'query_knowledge',
     description:
-      'Traverses Friday connected entity and belief graph using local semantic-vector recall. Use when the user asks how people, products, projects, places, or concepts are related. Contested facts must be described as uncertain.',
+      'Traverses YUV connected entity and belief graph using local semantic-vector recall. Use when the user asks how people, products, projects, places, or concepts are related. Contested facts must be described as uncertain.',
     parameters: z.object({
       query: z.string(),
       atTime: z.string().optional().describe('Optional ISO timestamp for a historical question.'),
@@ -302,7 +302,7 @@ export function createFridayTools({
   const createGoal = tool({
     name: 'create_goal',
     description:
-      'Creates a durable goal when the user explicitly asks Friday to pursue, track, or accomplish an outcome. A goal is not permission to execute consequential actions.',
+      'Creates a durable goal when the user explicitly asks YUV to pursue, track, or accomplish an outcome. A goal is not permission to execute consequential actions.',
     parameters: z.object({
       title: z.string().describe('Short goal title.'),
       desiredOutcome: z.string().describe('Concrete definition of success.'),
@@ -363,7 +363,7 @@ export function createFridayTools({
   const reviewGoals = tool({
     name: 'review_goals',
     description:
-      'Reviews active and blocked goals and identifies safe next actions. Use before claiming that Friday is continuing or resuming prior work.',
+      'Reviews active and blocked goals and identifies safe next actions. Use before claiming that YUV is continuing or resuming prior work.',
     parameters: z.object({}),
     execute: async () => {
       const [goals, actions] = await Promise.all([
@@ -447,7 +447,7 @@ export function createFridayTools({
   const updateWorldState = tool({
     name: 'update_world_state',
     description:
-      'Updates Friday current world model from a fresh observation. Use only for directly observed application, window, document, device, person, task, object, place, or concept state. Never infer hidden state.',
+      'Updates YUV current world model from a fresh observation. Use only for directly observed application, window, document, device, person, task, object, place, or concept state. Never infer hidden state.',
     parameters: z.object({
       name: z.string(),
       kind: z.enum([
@@ -560,7 +560,7 @@ export function createFridayTools({
   const updateCapability = tool({
     name: 'update_capability_state',
     description:
-      'Updates Friday self-model after direct evidence shows a capability is available, degraded, or unavailable. This prevents claiming abilities that are currently broken.',
+      'Updates YUV self-model after direct evidence shows a capability is available, degraded, or unavailable. This prevents claiming abilities that are currently broken.',
     parameters: z.object({
       name: z.string(),
       state: z.enum(['available', 'degraded', 'unavailable']),
@@ -588,7 +588,7 @@ export function createFridayTools({
   const cognitiveStatus = tool({
     name: 'cognitive_status',
     description:
-      'Inspects Friday current cognitive runtime, including queued perceptions, world model size, learned skills, reasoning audits, sleep cycles, and emergency-stop state.',
+      'Inspects YUV current cognitive runtime, including queued perceptions, world model size, learned skills, reasoning audits, sleep cycles, and emergency-stop state.',
     parameters: z.object({}),
     execute: async () => window.api.runtime.stats()
   })
@@ -633,7 +633,7 @@ function createControlComputerTool(consumeFreshApproval: (requestedAt: number) =
   let pending: { task: string; requestedAt: number } | null = null
   return tool({
     name: 'control_computer',
-    description: `Carries out a multi-step task directly on the boss's computer — opening apps, clicking, typing, navigating, searching, filling forms. Hand off the WHOLE task in plain language (e.g. "open Chrome and search for pizza", "play Daft Punk on Spotify", "close this window"). A specialist vision agent takes over, sees the screen, does the task step by step, and reports back what it did. Say a short filler line FIRST, then call this; it runs a few seconds.`,
+    description: `Carries out a multi-step task directly on the user's computer — opening apps, clicking, typing, navigating, searching, filling forms. Hand off the WHOLE task in plain language (e.g. "open Chrome and search for pizza", "play Daft Punk on Spotify", "close this window"). A specialist vision agent takes over, sees the screen, does the task step by step, and reports back what it did. Say a short filler line FIRST, then call this; it runs a few seconds.`,
     parameters: z.object({
       task: z
         .string()
@@ -702,7 +702,7 @@ const clickScreen = tool({
     const { ok } = await window.api.computerAction({ action, x, y })
     return ok
       ? `Clicked ${target}. The screen has likely changed — call look_at_screen again before your next action.`
-      : 'The click failed. Tell the boss you could not click right now.'
+      : 'The click failed. Tell the user you could not click right now.'
   }
 })
 
@@ -715,7 +715,7 @@ const typeText = tool({
   }),
   execute: async ({ text }) => {
     const { ok } = await window.api.computerAction({ action: 'type', text })
-    return ok ? 'Typed the text.' : 'Typing failed. Tell the boss you could not type right now.'
+    return ok ? 'Typed the text.' : 'Typing failed. Tell the user you could not type right now.'
   }
 })
 
@@ -728,7 +728,7 @@ const pressKey = tool({
   }),
   execute: async ({ keys }) => {
     const { ok } = await window.api.computerAction({ action: 'key', keys })
-    return ok ? `Pressed ${keys}.` : 'Key press failed. Tell the boss it did not go through.'
+    return ok ? `Pressed ${keys}.` : 'Key press failed. Tell the user it did not go through.'
   }
 })
 

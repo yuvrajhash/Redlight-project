@@ -5,7 +5,7 @@ export function ComputerUseCard({ action }: { action?: string }) {
         Computer control
       </p>
       <p className="mt-1 text-[12px] text-zinc-200">
-        {action ? `Working: ${action}` : 'Friday is navigating your screen…'}
+        {action ? `Working: ${action}` : 'YUV is navigating your screen…'}
       </p>
     </div>
   )

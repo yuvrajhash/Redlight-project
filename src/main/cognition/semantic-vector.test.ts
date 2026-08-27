@@ -4,7 +4,7 @@ import { semanticSimilarity, semanticVector } from './semantic-vector.ts'
 
 describe('local semantic vectors', () => {
   it('produces normalized fixed-size vectors', () => {
-    const vector = semanticVector('Friday remembers the user preference')
+    const vector = semanticVector('YUV remembers the user preference')
     const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
     assert.equal(vector.length, 128)
     assert.ok(Math.abs(magnitude - 1) < 0.000001)

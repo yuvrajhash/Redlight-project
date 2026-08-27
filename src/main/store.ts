@@ -9,22 +9,21 @@ export type ProviderConfig = {
   tts: string
 }
 
-export type FridayUser = {
-  id: string
-  email: string
-  name: string
-  picture?: string
+export type PrivacySettings = {
+  storeConversationMemory: boolean
+  storeScreenMemory: boolean
 }
 
 type StoreSchema = {
   onboardingComplete: boolean
   encryptedApiKeys: Partial<Record<KnownService, string>>
   providerConfig: ProviderConfig
-  user: FridayUser | null
+  selectedDisplayId: number | null
+  privacySettings: PrivacySettings
 }
 
 const store = new Store<StoreSchema>({
-  name: 'friday-config',
+  name: 'yuv-config',
   defaults: {
     onboardingComplete: false,
     encryptedApiKeys: {},
@@ -33,7 +32,11 @@ const store = new Store<StoreSchema>({
       stt: 'sarvam',
       tts: 'sarvam'
     },
-    user: null
+    selectedDisplayId: null,
+    privacySettings: {
+      storeConversationMemory: false,
+      storeScreenMemory: false
+    }
   }
 })
 
@@ -48,7 +51,7 @@ export function setOnboardingComplete(value: boolean): void {
 export function saveApiKey(service: KnownService, plainTextKey: string): void {
   const keys = store.get('encryptedApiKeys')
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('Secure OS key storage is unavailable. Friday refused to save the API key.')
+    throw new Error('Secure OS key storage is unavailable. YUV refused to save the API key.')
   }
   const encryptedBuffer = safeStorage.encryptString(plainTextKey)
   keys[service] = 'ENC_' + encryptedBuffer.toString('base64')
@@ -96,12 +99,20 @@ export function setProviderConfig(config: ProviderConfig): void {
   store.set('providerConfig', config)
 }
 
-export function getUser(): FridayUser | null {
-  return store.get('user') ?? null
+export function getSelectedDisplayId(): number | null {
+  return store.get('selectedDisplayId')
 }
 
-export function setUser(user: FridayUser | null): void {
-  store.set('user', user)
+export function setSelectedDisplayId(displayId: number | null): void {
+  store.set('selectedDisplayId', displayId)
+}
+
+export function getPrivacySettings(): PrivacySettings {
+  return store.get('privacySettings')
+}
+
+export function setPrivacySettings(settings: PrivacySettings): void {
+  store.set('privacySettings', settings)
 }
 
 export function resetStore(): void {

@@ -1,6 +1,6 @@
-# Friday Cognitive Architecture
+# YUV Cognitive Architecture
 
-Friday's cognition layer turns the voice agent from a stateless session into a persistent,
+YUV's cognition layer turns the voice agent from a stateless session into a persistent,
 evidence-aware system. This first version deliberately implements a small, inspectable cognitive
 kernel instead of presenting an LLM as consciousness.
 
@@ -36,22 +36,22 @@ kernel instead of presenting an LLM as consciousness.
 - **Structural secret rejection (v3)**: common credential, private-key, OTP, and payment-card patterns
   are rejected before an entity or relationship can enter the knowledge graph.
 
-Memory is stored in `cognition-v1.json` under Electron's per-user application-data directory. The
-goal graph is stored separately in `planning-v1.json`, and connected knowledge in
-`knowledge-v1.json`. All files are written atomically. API keys and secrets must never be stored as
-cognitive memories or graph entities.
+Memory is stored under Electron's per-user application-data directory. The goal graph, knowledge,
+world model, skills, and self-model use separate snapshots. Every snapshot is encrypted with the
+operating system's secure storage, written atomically, and backed by the last valid snapshot for
+crash recovery. Legacy plaintext snapshots migrate in place after a successful secure read.
 
 ## Runtime flow
 
 1. Completed user and assistant voice turns create episodic/reflection memories.
 2. Screen observations expire after one day; live-search facts expire after seven days.
 3. Computer-control outcomes become procedural memories.
-4. At session start, Friday retrieves recent and relevant memories and labels them as fallible
+4. At session start, YUV retrieves recent and relevant memories and labels them as fallible
    context in the system instructions.
 5. During a session, `recall_memory`, `remember_this`, and `audit_memory` give the realtime agent
    explicit memory operations.
 6. Consolidation runs every fifteen minutes and can also be initiated by the user.
-7. Explicit goals are decomposed into dependency-aware steps. Friday checks the graph before resuming
+7. Explicit goals are decomposed into dependency-aware steps. YUV checks the graph before resuming
    work and records the real outcome after each attempted step.
 8. A risky step cannot start until it enters `waiting_approval` and consumes a fresh user approval
    received after the approval request.
@@ -63,8 +63,8 @@ cognitive memories or graph entities.
 
 - Recalled memory is context, not unquestionable truth.
 - Time-sensitive claims still require live verification.
-- Explicit memory rejects an instruction to store secrets at the prompt/tool layer; structural
-  secret detection and encrypted memory storage remain future hardening work.
+- Explicit memory rejects secrets at the prompt/tool layer; structural secret detection protects
+  graph storage and every persisted cognitive snapshot is encrypted at rest.
 - OpenAI computer-use safety checks are never acknowledged automatically. The current safe behavior
   is to stop before the action and request explicit approval. Resumable approval is planned.
 - A goal is intent to pursue an outcome, not blanket permission. Current user instructions, operating
@@ -82,8 +82,8 @@ cognitive memories or graph entities.
 2. Learned procedures with success/failure statistics and safe rehearsal.
 3. User-visible goal, knowledge, and memory browser with granular editing and deletion.
 4. Optional provider embeddings for deeper semantic recall, with explicit privacy controls.
-5. Encrypted cognitive storage and configurable privacy modes.
-6. Cross-device sync through an authenticated, end-to-end-encrypted backend.
+5. Configurable per-modality retention and granular deletion.
+6. Optional cross-device sync through an authenticated, end-to-end-encrypted backend.
 
 This architecture does not claim consciousness, feelings, or biological equivalence. It provides
 the testable mechanics required for persistent perception, memory, recall, audit, and learning.

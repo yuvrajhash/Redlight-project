@@ -6,7 +6,7 @@ import { it } from 'node:test'
 import { CognitiveSystem } from './system.ts'
 
 it('links goal outcomes to durable reflection memory and session context', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'friday-system-'))
+  const directory = await mkdtemp(join(tmpdir(), 'yuv-system-'))
   const system = new CognitiveSystem({
     filePath: join(directory, 'memory.json'),
     planningFilePath: join(directory, 'planning.json'),
@@ -25,7 +25,7 @@ it('links goal outcomes to durable reflection memory and session context', async
   await system.beginStep(goal.id, planned.steps[0]!.id)
   await system.resolveStep(goal.id, planned.steps[0]!.id, 'All cognitive tests passed', true)
   await system.learnBelief({
-    subject: { name: 'Friday', kind: 'project' },
+    subject: { name: 'YUV', kind: 'project' },
     predicate: 'uses',
     object: { name: 'cognitive tests', kind: 'concept' },
     source: 'reflection',
@@ -44,7 +44,7 @@ it('links goal outcomes to durable reflection memory and session context', async
   assert.equal(reflections.length, 1)
   assert.match(reflections[0]!.content, /Expected:/)
   assert.match(context.text, /goal-reflection|Goal: Test cognition/)
-  assert.match(context.text, /Friday uses cognitive tests/)
+  assert.match(context.text, /YUV uses cognitive tests/)
   assert.equal(system.planner.stats().completedGoals, 1)
 
   await system.clearAll()

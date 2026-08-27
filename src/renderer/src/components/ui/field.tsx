@@ -9,12 +9,6 @@ export function Field({ className, children, ...props }: HTMLAttributes<HTMLDivE
   )
 }
 
-export function FieldLabel({
-  className,
-  children
-}: {
-  className?: string
-  children: ReactNode
-}) {
+export function FieldLabel({ className, children }: { className?: string; children: ReactNode }) {
   return <label className={cn('text-sm font-medium', className)}>{children}</label>
 }

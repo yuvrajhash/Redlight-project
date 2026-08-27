@@ -1,13 +1,16 @@
 {
-  "name": "friday",
-  "version": "0.0.1",
-  "description": "An Electron application with React and TypeScript",
+  "name": "yuv",
+  "version": "0.1.0",
+  "description": "YUV — a private cognitive desktop assistant by Yuvraj Choudhary.",
   "main": "./out/main/index.js",
-  "author": "SAGAR TAMANG",
-  "homepage": "http://friday.feynmanpi.com/",
+  "author": {
+    "name": "Yuvraj Choudhary",
+    "url": "https://github.com/yuvrajhash"
+  },
+  "homepage": "https://github.com/yuvrajhash/Redlight-project",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SAGAR-TAMANG/friday.git"
+    "url": "https://github.com/yuvrajhash/Redlight-project.git"
   },
   "engines": {
     "node": ">=22"
@@ -24,6 +27,8 @@
     "build:linux": "pnpm build && electron-builder --linux",
     "postinstall": "node scripts/postinstall.mjs",
     "lint": "eslint --cache .",
+    "verify:identity": "node scripts/verify-identity.mjs",
+    "validate": "pnpm verify:identity && pnpm test && pnpm typecheck && pnpm lint && pnpm build",
     "test": "node --experimental-strip-types --test src/main/cognition/*.test.ts",
     "format": "prettier --write ."
   },
@@ -88,11 +93,5 @@
     "tailwindcss": "^4.1.8",
     "typescript": "^5.9.2",
     "vite": "^6.3.5"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild"
-    ]
   }
 }

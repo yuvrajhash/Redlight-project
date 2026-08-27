@@ -1,25 +1,11 @@
-import { useCallback, useEffect, useState, type HTMLAttributes } from 'react'
+import { useCallback, useState, type HTMLAttributes } from 'react'
 import { motion } from 'motion/react'
-import { Volume2, VolumeX } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { AsciiVideo } from '@/components/ascii-video'
-import { FridayOrb } from '@/components/friday-orb'
+import { YUVOrb } from '@/components/yuv-orb'
 import { IntroWelcome, PermissionsStep } from '@/components/intro-welcome'
 import { BYOKSetup } from '@/components/byok-setup'
-import { useOnboardingAudio } from '@/hooks/use-onboarding-audio'
-import velvetCircuit from '@/assets/audio/velvet-circuit.mp3'
-import welcomeVoice from '@/assets/audio/welcome.mp3'
-import permissionsVoice from '@/assets/audio/permissions.mp3'
-import byokVoice from '@/assets/audio/byok.mp3'
-import videoSrc from '@/assets/video/onboarding-spinner-bg.mp4'
 
 type Step = 'welcome' | 'permissions' | 'byok'
-
-const onboardingScript: Record<Step, { voice: string }> = {
-  welcome: { voice: welcomeVoice },
-  permissions: { voice: permissionsVoice },
-  byok: { voice: byokVoice }
-}
 
 const asciiMotionByStep: Record<Step, { opacity: number; y: number }> = {
   welcome: { opacity: 0.9, y: 0 },
@@ -40,29 +26,17 @@ export function Onboarding({
   const inverted = step === 'permissions' && permsGranted
   const [finishing, setFinishing] = useState(false)
   const [finishError, setFinishError] = useState('')
-  const musicSection = {
-    welcome: { start: 0, end: 27.5 },
-    permissions: { start: 40, end: 142 },
-    byok: { start: 144.3, end: Infinity }
-  }[step]
-  const { level, muted, toggleMute, playVoice, speaking, outputTrack, playOutro } =
-    useOnboardingAudio(velvetCircuit, musicSection)
-
-  useEffect(() => {
-    void playVoice(onboardingScript[step].voice)
-  }, [step, playVoice])
 
   const finishOnboarding = useCallback(async () => {
     setFinishing(true)
     setFinishError('')
     try {
-      await playOutro()
       await onComplete()
     } catch (error) {
       setFinishError(error instanceof Error ? error.message : 'Could not finish setup.')
       setFinishing(false)
     }
-  }, [onComplete, playOutro])
+  }, [onComplete])
 
   return (
     <div className={cn('absolute inset-0', className)} {...props}>
@@ -74,7 +48,17 @@ export function Onboarding({
         style={{ pointerEvents: finishing ? 'none' : undefined }}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.55)_0%,rgba(0,0,0,0.82)_100%)]" />
-        <FridayOrb speaking={speaking} audioTrack={outputTrack} />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <motion.div
+            className="absolute left-1/2 top-1/2 h-[720px] w-[720px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[conic-gradient(from_90deg,rgba(31,213,249,0.16),rgba(99,102,241,0.08),rgba(31,213,249,0.16))] blur-3xl"
+            animate={{ rotate: 360, scale: [0.9, 1.05, 0.9] }}
+            transition={{
+              rotate: { duration: 24, repeat: Infinity, ease: 'linear' },
+              scale: { duration: 7, repeat: Infinity }
+            }}
+          />
+        </div>
+        <YUVOrb speaking={false} audioTrack={null} />
         <div className="flex w-full max-w-lg flex-col items-center gap-3">
           <div
             className={cn(
@@ -84,21 +68,11 @@ export function Onboarding({
             )}
           >
             <motion.div
-              className="pointer-events-none absolute inset-0 z-0"
+              className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_50%_45%,rgba(31,213,249,0.12),transparent_55%)]"
               initial={false}
               animate={asciiMotionByStep[step]}
               transition={{ duration: 0.8, ease: 'easeInOut' }}
-            >
-              <motion.div
-                className="absolute inset-0"
-                style={{
-                  scale: 1 + level * 0.08,
-                  filter: `brightness(${1 + level * 0.5})`
-                }}
-              >
-                <AsciiVideo src={videoSrc} className="absolute top-0 h-full w-full" />
-              </motion.div>
-            </motion.div>
+            />
             <div className="relative z-10 h-full">
               {step === 'welcome' && <IntroWelcome onStart={() => setStep('permissions')} />}
               {step === 'permissions' && (
@@ -107,14 +81,6 @@ export function Onboarding({
               {step === 'byok' && <BYOKSetup onComplete={() => void finishOnboarding()} />}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={toggleMute}
-            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[11px] text-zinc-300 backdrop-blur"
-          >
-            {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-            {muted ? 'Unmute' : 'Mute'}
-          </button>
           {finishError ? (
             <p className="max-w-md text-center text-xs text-red-300">{finishError}</p>
           ) : null}
